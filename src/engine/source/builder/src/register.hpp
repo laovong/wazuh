@@ -13,18 +13,14 @@
 #include "builders/opfilter/opBuilderHelperFilter.hpp"
 
 // Map builders
-#include "builders/opmap/activeResponse.hpp"
 #include "builders/opmap/map.hpp"
 #include "builders/opmap/mmdb.hpp"
 #include "builders/opmap/opBuilderHelperMap.hpp"
-#include "builders/opmap/upgradeConfirmation.hpp"
-#include "builders/opmap/wdb.hpp"
 
 // Transform builders
 #include "builders/opmap/kvdb.hpp"
 #include "builders/optransform/array.hpp"
 #include "builders/optransform/hlp.hpp"
-#include "builders/optransform/sca.hpp"
 #include "builders/optransform/windows.hpp"
 
 // Stage builders
@@ -57,6 +53,8 @@ void registerOpBuilders(const std::shared_ptr<Registry>& registry, const Builder
     registry->template add<builders::OpBuilderEntry>(
         "not_exists", {schemf::runtimeValidation(), builders::opfilter::notExistsBuilder});
     registry->template add<builders::OpBuilderEntry>(
+        "is_test_session", {schemf::runtimeValidation(), builders::opfilter::opBuilderHelperIsTestSession});
+    registry->template add<builders::OpBuilderEntry>(
         "array_contains", {schemf::isArrayToken(), builders::opfilter::opBuilderHelperContains});
     registry->template add<builders::OpBuilderEntry>(
         "array_contains_any", {schemf::isArrayToken(), builders::opfilter::opBuilderHelperContainsAny});
@@ -87,6 +85,10 @@ void registerOpBuilders(const std::shared_ptr<Registry>& registry, const Builder
     registry->template add<builders::OpBuilderEntry>(
         "is_public_ip", {schemf::STypeToken::create(schemf::Type::IP), builders::opfilter::opBuilderHelperPublicIP});
     registry->template add<builders::OpBuilderEntry>(
+        "is_ipv4", {schemf::STypeToken::create(schemf::Type::IP), builders::opfilter::opBuilderHelperIsIpv4});
+    registry->template add<builders::OpBuilderEntry>(
+        "is_ipv6", {schemf::STypeToken::create(schemf::Type::IP), builders::opfilter::opBuilderHelperIsIpv6});
+    registry->template add<builders::OpBuilderEntry>(
         "is_array", {schemf::runtimeValidation(), builders::opfilter::opBuilderHelperIsArray});
     registry->template add<builders::OpBuilderEntry>(
         "is_boolean", {schemf::runtimeValidation(), builders::opfilter::opBuilderHelperIsBool});
@@ -110,6 +112,9 @@ void registerOpBuilders(const std::shared_ptr<Registry>& registry, const Builder
         "is_object", {schemf::runtimeValidation(), builders::opfilter::opBuilderHelperIsObject});
     registry->template add<builders::OpBuilderEntry>(
         "is_string", {schemf::runtimeValidation(), builders::opfilter::opBuilderHelperIsString});
+    registry->template add<builders::OpBuilderEntry>(
+        "has_keys",
+        {schemf::JTypeToken::create(json::Json::Type::Object), builders::opfilter::opBuilderHelperKeysExistInList});
     registry->template add<builders::OpBuilderEntry>(
         "binary_and",
         {schemf::JTypeToken::create(json::Json::Type::String), builders::opfilter::opBuilderHelperBinaryAnd});
@@ -141,6 +146,9 @@ void registerOpBuilders(const std::shared_ptr<Registry>& registry, const Builder
         "starts_with",
         {schemf::JTypeToken::create(json::Json::Type::String), builders::opfilter::opBuilderHelperStringStarts});
     registry->template add<builders::OpBuilderEntry>(
+        "ends_with",
+        {schemf::JTypeToken::create(json::Json::Type::String), builders::opfilter::opBuilderHelperEndsWith});
+    registry->template add<builders::OpBuilderEntry>(
         "contains",
         {schemf::JTypeToken::create(json::Json::Type::String), builders::opfilter::opBuilderHelperStringContains});
     registry->template add<builders::OpBuilderEntry>(
@@ -155,7 +163,11 @@ void registerOpBuilders(const std::shared_ptr<Registry>& registry, const Builder
     registry->template add<builders::OpBuilderEntry>(
         "to_string", {schemf::JTypeToken::create(json::Json::Type::String), builders::opBuilderHelperNumberToString});
     registry->template add<builders::OpBuilderEntry>(
-        "int_calculate", {schemf::JTypeToken::create(json::Json::Type::Number), builders::opBuilderHelperIntCalc});
+        "int_calculate",
+        {schemf::JTypeToken::create(json::Json::Type::Number), builders::getOpBuilderHelperCalc(true)});
+    registry->template add<builders::OpBuilderEntry>(
+        "float_calculate",
+        {schemf::JTypeToken::create(json::Json::Type::Number), builders::getOpBuilderHelperCalc(false)});
     registry->template add<builders::OpBuilderEntry>(
         "regex_extract", {schemf::JTypeToken::create(json::Json::Type::String), builders::opBuilderHelperRegexExtract});
     // Map helpers: Hash functions
@@ -219,11 +231,16 @@ void registerOpBuilders(const std::shared_ptr<Registry>& registry, const Builder
         "replace", {schemf::JTypeToken::create(json::Json::Type::String), builders::opBuilderHelperStringReplace});
     registry->template add<builders::OpBuilderEntry>(
         "trim", {schemf::JTypeToken::create(json::Json::Type::String), builders::opBuilderHelperStringTrim});
+    registry->template add<builders::OpBuilderEntry>(
+        "to_int", {schemf::JTypeToken::create(json::Json::Type::Number), builders::opBuilderHelperToInt});
     // Transform helpers: Definition functions
     registry->template add<builders::OpBuilderEntry>(
         "get_key_in", {schemf::runtimeValidation(), builders::opBuilderHelperGetValue}); // TODO: add validation
     registry->template add<builders::OpBuilderEntry>(
         "merge_key_in", {schemf::STypeToken::create(schemf::Type::OBJECT), builders::opBuilderHelperMergeValue});
+    registry->template add<builders::OpBuilderEntry>(
+        "merge_recursive_key_in",
+        {schemf::STypeToken::create(schemf::Type::OBJECT), builders::opBuilderHelperMergeRecursiveValue});
     // Transform helpers: MMDB functions
     registry->template add<builders::OpBuilderEntry>(
         "geoip",
@@ -286,7 +303,12 @@ void registerOpBuilders(const std::shared_ptr<Registry>& registry, const Builder
         "kvdb_get", {schemf::runtimeValidation(), builders::getOpBuilderKVDBGet(deps.kvdbManager, deps.kvdbScopeName)});
     registry->template add<builders::OpBuilderEntry>(
         "kvdb_get_merge",
-        {schemf::runtimeValidation(), builders::getOpBuilderKVDBGetMerge(deps.kvdbManager, deps.kvdbScopeName)});
+        {schemf::STypeToken::create(schemf::Type::OBJECT),
+         builders::getOpBuilderKVDBGetMerge(deps.kvdbManager, deps.kvdbScopeName)});
+    registry->template add<builders::OpBuilderEntry>(
+        "kvdb_get_merge_recursive",
+        {schemf::STypeToken::create(schemf::Type::OBJECT),
+         builders::getOpBuilderKVDBGetMergeRecursive(deps.kvdbManager, deps.kvdbScopeName)});
     registry->template add<builders::OpBuilderEntry>(
         "kvdb_match",
         {schemf::runtimeValidation(), builders::getOpBuilderKVDBMatch(deps.kvdbManager, deps.kvdbScopeName)});
@@ -302,30 +324,6 @@ void registerOpBuilders(const std::shared_ptr<Registry>& registry, const Builder
         "kvdb_decode_bitmask",
         {schemf::runtimeValidation(),
          builders::getOpBuilderHelperKVDBDecodeBitmask(deps.kvdbManager, deps.kvdbScopeName)});
-
-    // Active Response builders
-    registry->template add<builders::OpBuilderEntry>(
-        "active_response_send", {schemf::runtimeValidation(), builders::getOpBuilderSendAr(deps.sockFactory)});
-    // TODO: this builder is not used in the ruleset
-    // registry->template add<builders::OpBuilderEntry>("active_response_create",
-    //                                                  {schemf::runtimeValidation(), builders::CreateARBuilder});
-
-    // Upgrade confirmation builder
-    registry->template add<builders::OpBuilderEntry>(
-        "send_upgrade_confirmation",
-        {schemf::JTypeToken::create(json::Json::Type::Boolean),
-         builders::opmap::getUpgradeConfirmationBUilder(deps.sockFactory)});
-
-    // WDB builders
-    registry->template add<builders::OpBuilderEntry>(
-        "wdb_update", {schemf::runtimeValidation(), builders::opmap::getWdbUpdateBuilder(deps.wdbManager)});
-    registry->template add<builders::OpBuilderEntry>(
-        "wdb_query", {schemf::runtimeValidation(), builders::opmap::getWdbQueryBuilder(deps.wdbManager)});
-
-    // SCA builders
-    registry->template add<builders::OpBuilderEntry>(
-        "sca_decoder",
-        {schemf::runtimeValidation(), builders::optransform::getBuilderSCAdecoder(deps.wdbManager, deps.sockFactory)});
 
     // Windows builders
     // registry->template add<builders::OpBuilderEntry>(

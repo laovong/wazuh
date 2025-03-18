@@ -7,8 +7,8 @@ from importlib import reload
 from unittest.mock import patch
 
 from sqlalchemy import create_engine
-from sqlalchemy.exc import OperationalError
 from sqlalchemy import orm as sqlalchemy_orm
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.sql import text
 
 
@@ -23,27 +23,26 @@ def create_memory_db(sql_file, session, test_data_path):
 
 def init_db(schema, test_data_path):
     with patch('wazuh.core.common.wazuh_uid'), patch('wazuh.core.common.wazuh_gid'):
-        with patch('sqlalchemy.create_engine', return_value=create_engine("sqlite://")):
+        with patch('sqlalchemy.create_engine', return_value=create_engine('sqlite://')):
             with patch('shutil.chown'), patch('os.chmod'):
-                with patch('wazuh.core.common.WAZUH_SERVER_YML', new=test_data_path):
-                    import wazuh.rbac.orm as orm
+                import wazuh.rbac.orm as orm
 
-                    # Clear mappers
-                    sqlalchemy_orm.clear_mappers()
-                    # Invalidate in-memory database
-                    orm.db_manager.close_sessions()
-                    orm.db_manager.connect(orm.DB_FILE)
-                    orm.db_manager.sessions[orm.DB_FILE].close()
-                    orm.db_manager.engines[orm.DB_FILE].dispose()
+                # Clear mappers
+                sqlalchemy_orm.clear_mappers()
+                # Invalidate in-memory database
+                orm.db_manager.close_sessions()
+                orm.db_manager.connect(orm.DB_FILE)
+                orm.db_manager.sessions[orm.DB_FILE].close()
+                orm.db_manager.engines[orm.DB_FILE].dispose()
 
-                    reload(orm)
-                    orm.db_manager.connect(orm.DB_FILE)
-                    orm.db_manager.create_database(orm.DB_FILE)
-                    orm.db_manager.insert_default_resources(orm.DB_FILE)
-                    import wazuh.rbac.decorators as decorators
-                    from wazuh.tests.util import RBAC_bypasser
+                reload(orm)
+                orm.db_manager.connect(orm.DB_FILE)
+                orm.db_manager.create_database(orm.DB_FILE)
+                orm.db_manager.insert_default_resources(orm.DB_FILE)
+                import wazuh.rbac.decorators as decorators
+                from wazuh.tests.util import RBAC_bypasser
 
-                    decorators.expose_resources = RBAC_bypasser
+                decorators.expose_resources = RBAC_bypasser
     try:
         create_memory_db(schema, orm.db_manager.sessions[orm.DB_FILE], test_data_path)
     except OperationalError:
@@ -51,8 +50,7 @@ def init_db(schema, test_data_path):
 
 
 class MockRolePolicy:
-    """
-    A mock representation of a role policy.
+    """A mock representation of a role policy.
 
     This class represents a mock role policy with attributes for role ID, policy ID, creation date,
     and policy level.
@@ -63,6 +61,7 @@ class MockRolePolicy:
         created_at (str): The creation date of the policy.
         level (int): The policy level.
     """
+
     def __init__(self, role_id, policy_id, created_at, level):
         self.role_id = role_id
         self.policy_id = policy_id
@@ -71,8 +70,7 @@ class MockRolePolicy:
 
 
 class MockedUserRole:
-    """
-    A mock representation of a user's role.
+    """A mock representation of a user's role.
 
     This class represents a mock user's role with attributes for user ID, role ID, creation date,
     and role level.
@@ -83,6 +81,7 @@ class MockedUserRole:
         created_at (str): The creation date of the user's role.
         level (int): The role level.
     """
+
     def __init__(self, user_id, role_id, created_at, level):
         self.user_id = user_id
         self.role_id = role_id
@@ -91,8 +90,7 @@ class MockedUserRole:
 
 
 class MockRoleRules:
-    """
-    A mock representation of role rules.
+    """A mock representation of role rules.
 
     This class represents mock role rules with attributes for role ID, rule ID, creation date,
     and rule level.
@@ -103,6 +101,7 @@ class MockRoleRules:
         created_at (str): The creation date of the rules.
         level (int): The rule level.
     """
+
     def __init__(self, role_id, rule_id, created_at, level):
         self.role_id = role_id
         self.rule_id = rule_id

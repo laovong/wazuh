@@ -7,17 +7,10 @@
 #include <thread>
 #include <vector>
 
-#include <api/api.hpp>
 #include <api/catalog/catalog.hpp>
-#include <api/catalog/handlers.hpp>
-#include <api/geo/handlers.hpp>
-#include <api/graph/handlers.hpp>
-#include <api/kvdb/handlers.hpp>
-#include <api/policy/handlers.hpp>
+#include <api/event/ndJsonParser.hpp>
+#include <api/handlers.hpp>
 #include <api/policy/policy.hpp>
-#include <api/router/handlers.hpp>
-#include <api/tester/handlers.hpp>
-#include <apiserver/apiServer.hpp>
 #include <base/logging.hpp>
 #include <base/utils/singletonLocator.hpp>
 #include <base/utils/singletonLocatorStrategies.hpp>
@@ -29,6 +22,7 @@
 #include <eMessages/eMessage.h>
 #include <geo/downloader.hpp>
 #include <geo/manager.hpp>
+#include <httpsrv/server.hpp>
 #include <indexerConnector/indexerConnector.hpp>
 #include <kvdb/kvdbManager.hpp>
 #include <logpar/logpar.hpp>
@@ -38,15 +32,9 @@
 #include <rbac/rbac.hpp>
 #include <router/orchestrator.hpp>
 #include <schemf/schema.hpp>
-#include <server/endpoints/unixDatagram.hpp>
-#include <server/endpoints/unixStream.hpp>
-#include <server/engineServer.hpp>
-#include <server/protocolHandlers/wStream.hpp>
-#include <sockiface/unixSocketFactory.hpp>
 #include <store/drivers/fileDriver.hpp>
 #include <store/store.hpp>
 #include <vdscanner/scanOrchestrator.hpp>
-#include <wdb/wdbManager.hpp>
 
 #include "base/utils/getExceptionStack.hpp"
 #include "stackExecutor.hpp"
@@ -60,21 +48,14 @@ struct QueueTraits : public moodycamel::ConcurrentQueueDefaultTraits
 };
 } // namespace
 
-std::shared_ptr<engineserver::EngineServer> g_engineServer {};
-std::shared_ptr<apiserver::ApiServer> g_apiServer {};
+std::shared_ptr<httpsrv::Server> g_engineServer {};
 
 void sigintHandler(const int signum)
 {
     if (g_engineServer)
     {
-        g_engineServer->request_stop();
+        g_engineServer->stop();
         g_engineServer.reset();
-    }
-
-    if (g_apiServer)
-    {
-        g_apiServer->stop();
-        g_apiServer.reset();
     }
 }
 
@@ -126,8 +107,6 @@ int main(int argc, char* argv[])
     }
 
     // Init modules
-    std::shared_ptr<api::Api> api;
-    std::shared_ptr<engineserver::EngineServer> server;
     std::shared_ptr<store::Store> store;
     std::shared_ptr<builder::Builder> builder;
     std::shared_ptr<api::catalog::Catalog> catalog;
@@ -136,12 +115,11 @@ int main(int argc, char* argv[])
     std::shared_ptr<kvdbManager::KVDBManager> kvdbManager;
     std::shared_ptr<geo::Manager> geoManager;
     std::shared_ptr<schemf::Schema> schema;
-    std::shared_ptr<sockiface::UnixSocketFactory> sockFactory;
-    std::shared_ptr<wazuhdb::WDBManager> wdbManager;
     std::shared_ptr<rbac::RBAC> rbac;
     std::shared_ptr<api::policy::IPolicy> policyManager;
     std::shared_ptr<vdscanner::ScanOrchestrator> vdScanner;
     std::shared_ptr<IIndexerConnector> iConnector;
+    std::shared_ptr<httpsrv::Server> apiServer;
 
     try
     {
@@ -175,7 +153,7 @@ int main(int argc, char* argv[])
             icConfig.password = confManager.get<std::string>(conf::key::INDEXER_PASSWORD);
             if (confManager.get<bool>(conf::key::INDEXER_SSL_USE_SSL))
             {
-                icConfig.sslOptions.cacert = confManager.get<std::vector<std::string>>(conf::key::INDEXER_SSL_CA_LIST);
+                icConfig.sslOptions.cacert = confManager.get<std::string>(conf::key::INDEXER_SSL_CA_BUNDLE);
                 icConfig.sslOptions.cert = confManager.get<std::string>(conf::key::INDEXER_SSL_CERTIFICATE);
                 icConfig.sslOptions.key = confManager.get<std::string>(conf::key::INDEXER_SSL_KEY);
             }
@@ -201,8 +179,18 @@ int main(int argc, char* argv[])
 
             SingletonLocator::instance<metrics::IManager>().configure(config);
 
-            // TODO add enabled flag to the configuration when config refactor is done
-            SingletonLocator::instance<metrics::IManager>().enable();
+            LOG_INFO("Metrics initialized.");
+
+            if (confManager.get<bool>(conf::key::METRICS_ENABLED))
+            {
+                SingletonLocator::instance<metrics::IManager>().enable();
+                LOG_INFO("Metrics enabled.");
+            }
+            else
+            {
+                SingletonLocator::instance<metrics::IManager>().disable();
+                LOG_INFO("Metrics disabled.");
+            }
 
             exitHandler.add(
                 []()
@@ -210,8 +198,6 @@ int main(int argc, char* argv[])
                     SingletonLocator::instance<metrics::IManager>().disable();
                     SingletonLocator::clear();
                 });
-
-            LOG_INFO("Metrics initialized.");
         }
 
         // Store
@@ -272,16 +258,16 @@ int main(int argc, char* argv[])
             hlp::initTZDB(confManager.get<std::string>(conf::key::TZDB_PATH),
                           confManager.get<bool>(conf::key::TZDB_AUTO_UPDATE));
 
-            base::Name hlpConfigFileName({"schema", "wazuh-logpar-types", "0"});
-            auto hlpParsers = store->readInternalDoc(hlpConfigFileName);
-            if (std::holds_alternative<base::Error>(hlpParsers))
+            base::Name logparFieldOverrides({"schema", "wazuh-logpar-overrides", "0"});
+            auto res = store->readInternalDoc(logparFieldOverrides);
+            if (std::holds_alternative<base::Error>(res))
             {
-                throw std::runtime_error(fmt::format("Could not retreive configuration file [{}] needed by the "
+                throw std::runtime_error(fmt::format("Could not retreive logpar field overrides [{}] needed by the "
                                                      "HLP module, error: {}",
-                                                     hlpConfigFileName.fullName(),
-                                                     std::get<base::Error>(hlpParsers).message));
+                                                     logparFieldOverrides.fullName(),
+                                                     base::getError(res).message));
             }
-            logpar = std::make_shared<hlp::logpar::Logpar>(std::get<json::Json>(hlpParsers), schema);
+            logpar = std::make_shared<hlp::logpar::Logpar>(base::getResponse<store::Doc>(res), schema);
             hlp::registerParsers(logpar);
             LOG_INFO("HLP initialized.");
         }
@@ -295,7 +281,7 @@ int main(int argc, char* argv[])
             icConfig.password = confManager.get<std::string>(conf::key::INDEXER_PASSWORD);
             if (confManager.get<bool>(conf::key::INDEXER_SSL_USE_SSL))
             {
-                icConfig.sslOptions.cacert = confManager.get<std::vector<std::string>>(conf::key::INDEXER_SSL_CA_LIST);
+                icConfig.sslOptions.cacert = confManager.get<std::string>(conf::key::INDEXER_SSL_CA_BUNDLE);
                 icConfig.sslOptions.cert = confManager.get<std::string>(conf::key::INDEXER_SSL_CERTIFICATE);
                 icConfig.sslOptions.key = confManager.get<std::string>(conf::key::INDEXER_SSL_KEY);
                 icConfig.sslOptions.skipVerifyPeer = !confManager.get<bool>(conf::key::INDEXER_SSL_VERIFY_CERTS);
@@ -340,9 +326,6 @@ int main(int argc, char* argv[])
             builderDeps.logpar = logpar;
             builderDeps.kvdbScopeName = "builder";
             builderDeps.kvdbManager = kvdbManager;
-            builderDeps.sockFactory = std::make_shared<sockiface::UnixSocketFactory>();
-            builderDeps.wdbManager =
-                std::make_shared<wazuhdb::WDBManager>(std::string(wazuhdb::WDB_SOCK_PATH), builderDeps.sockFactory);
             builderDeps.geoManager = geoManager;
             builderDeps.iConnector = iConnector;
             auto defs = std::make_shared<defs::DefinitionsBuilder>();
@@ -403,66 +386,48 @@ int main(int argc, char* argv[])
             LOG_INFO("Router initialized.");
         }
 
-        // Create and configure the api endpints
-        {
-            // API
-            api = std::make_shared<api::Api>(rbac);
-            LOG_DEBUG("API created.");
-            exitHandler.add(
-                [api, functionName = logging::getLambdaName(__FUNCTION__, "exitHandler")]()
-                {
-                    eMessage::ShutdownEMessageLibrary();
-                    LOG_INFO_L(functionName.c_str(), "API terminated.");
-                });
-
-            // TODO Register Metrics
-            // LOG_DEBUG("Metrics API registered.");
-
-            // KVDB
-            api::kvdb::handlers::registerHandlers(kvdbManager, "api", api);
-            LOG_DEBUG("KVDB API registered.");
-
-            // Catalog
-            api::catalog::handlers::registerHandlers(catalog, api);
-            LOG_DEBUG("Catalog API registered.");
-
-            // Policy
-            {
-                api::policy::handlers::registerHandlers(policyManager, api);
-                exitHandler.add([functionName = logging::getLambdaName(__FUNCTION__, "exitHandler")]()
-                                { LOG_DEBUG_L(functionName.c_str(), "Policy API terminated."); });
-                LOG_DEBUG("Policy API registered.");
-            }
-
-            // Router
-            api::router::handlers::registerHandlers(orchestrator, policyManager, api);
-            LOG_DEBUG("Router API registered.");
-
-            // Graph
-            {
-                // Register the Graph command
-                api::graph::handlers::Config graphConfig {builder};
-                api::graph::handlers::registerHandlers(graphConfig, api);
-                LOG_DEBUG("Graph API registered.");
-            }
-
-            // Tester
-            api::tester::handlers::registerHandlers(orchestrator, store, policyManager, api);
-            LOG_DEBUG("Tester API registered.");
-
-            // Geo
-            api::geo::handlers::registerHandlers(geoManager, api);
-            LOG_DEBUG("Geo API registered.");
-        }
-
         // VD Scanner
         {
             vdScanner = std::make_shared<vdscanner::ScanOrchestrator>();
         }
 
-        // API Server
+        // Create and configure the api endpints
         {
-            g_apiServer = std::make_shared<apiserver::ApiServer>();
+            apiServer = std::make_shared<httpsrv::Server>("API_SRV");
+
+            // API
+            exitHandler.add(
+                [apiServer]()
+                {
+                    apiServer->stop();
+                    eMessage::ShutdownEMessageLibrary();
+                });
+
+            // TODO Add Metrics API registration
+
+            // Catalog
+            api::catalog::handlers::registerHandlers(catalog, apiServer);
+            LOG_DEBUG("Catalog API registered.");
+
+            // Geo
+            api::geo::handlers::registerHandlers(geoManager, apiServer);
+            LOG_DEBUG("Geo API registered.");
+
+            // KVDB
+            api::kvdb::handlers::registerHandlers(kvdbManager, apiServer);
+            LOG_DEBUG("KVDB API registered.");
+
+            // Policy
+            api::policy::handlers::registerHandlers(policyManager, apiServer);
+            LOG_DEBUG("Policy API registered.");
+
+            // Router
+            api::router::handlers::registerHandlers(orchestrator, policyManager, apiServer);
+            LOG_DEBUG("Router API registered.");
+
+            // Tester
+            api::tester::handlers::registerHandlers(orchestrator, store, policyManager, apiServer);
+            LOG_DEBUG("Tester API registered.");
 
             // Add apidoc documentation.
             /**
@@ -616,15 +581,22 @@ int main(int argc, char* argv[])
              *   "code": 503
              *  }
              */
-            g_apiServer->addRoute(apiserver::Method::POST,
-                                  "/vulnerability/scan",
-                                  [vdScanner](const auto& req, auto& res)
-                                  {
-                                      vdScanner->processEvent(req.body, res.body);
-                                      res.set_header("Content-Type", "application/json");
-                                  });
+            apiServer->addRoute(httpsrv::Method::POST,
+                                "/vulnerability/scan",
+                                [vdScanner](const auto& req, auto& res)
+                                {
+                                    vdScanner->processEvent(req.body, res.body);
+                                    res.set_header("Content-Type", "application/json");
+                                });
+            LOG_DEBUG("VD API endpoint registered.");
 
-            LOG_DEBUG("API Server configured.");
+            // Finally start the API server
+            apiServer->start(confManager.get<std::string>(conf::key::SERVER_API_SOCKET));
+        }
+
+        // Server
+        {
+            g_engineServer = std::make_shared<httpsrv::Server>("EVENT_SRV");
 
             // clang-format off
             /**
@@ -639,17 +611,17 @@ int main(int argc, char* argv[])
              * **Example NDJSON Payload:**
              * ```
              * {"agent":{"id":"2887e1cf-9bf2-431a-b066-a46860080f56","name":"javier","type":"endpoint","version":"5.0.0","groups":["group1","group2"],"host":{"hostname":"myhost","os":{"name":"Amazon Linux 2","platform":"Linux"},"ip":["192.168.1.2"],"architecture":"x86_64"}}}
-             * {"module": "logcollector", "type": "file"}
-             * {"log": {"file": {"path": "/var/log/apache2/access.log"}}, "tags": ["production-server"], "event": {"original": "::1 - - [26/Jun/2020:16:16:29 +0200] \"GET /favicon.ico HTTP/1.1\" 404 209", "created": "2023-12-26T09:22:14.000Z", "module": "apache-access", "provider": "file"}}
-             * {"log":{"file":{"path":"/var/log/apache2/error.log"}},"tags":["production-server"],"event":{"original":"::1 - - [26/Jun/2020:16:16:29 +0200] \"GET /favicon.ico HTTP/1.1\" 404 209","created":"2023-12-26T09:22:14.000Z","module":"apache-error","provider":"file"}}
-             * {"log":{"file":{"path":"/var/log/syslog"}},"tags":["production-server"],"event":{"original":"::1 - - [26/Jun/2020:16:16:29 +0200] \"GET /favicon.ico HTTP/1.1\" 404 209","created":"2023-12-26T09:22:14.000Z","module":"syslog","provider":"file"}}
-             * {"tags":["production-server"],"event":{"original":"XML EVENT AS STRING","created":"2023-12-26T09:22:14.000Z","module":"$CHANEL_NAME","provider":"windows-evenchannel"}}
-             * {"tags":["production-server"],"event":{"original":"XML EVENT AS STRING","created":"2023-12-26T09:22:14.000Z","module":"Microsoft-Windows-Security-Auditing","provider":"windows-evenchannel"}}
-             * {"tags":["production-server"],"event":{"original":"XML EVENT AS STRING","created":"2023-12-26T09:22:14.000Z","module":"Windows PowerShell","provider":"windows-evenchannel"}}
-             * {"tags":["production-server"],"event":{"original":"JSON EVENT OF JOURNALD AS STRING","created":"2023-12-26T09:22:14.000Z","module":"$UNIT_NAME","provider":"journald"}}
-             * {"tags":["production-server"],"event":{"original":"JSON EVENT OF JOURNALD AS STRING","created":"2023-12-26T09:22:14.000Z","module":"ssh.service","provider":"journald"}}
-             * {"module": "inventory", "type": "package"}
-             * {"tags": ["string"], "event": {"original": "string", "created": "string", "module": "string", "provider": "string"}}
+             * {"module": "logcollector", "collector": "file"}
+             * {"log": {"file": {"path": "/var/log/apache2/access.log"}}, "tags": ["production-server"], "event": {"original": "::1 - - [26/Jun/2020:16:16:29 +0200] \"GET /favicon.ico HTTP/1.1\" 404 209", "created": "2023-12-26T09:22:14.000Z"}}
+             * {"log":{"file":{"path":"/var/log/apache2/error.log"}},"tags":["production-server"],"event":{"original":"::1 - - [26/Jun/2020:16:16:29 +0200] \"GET /favicon.ico HTTP/1.1\" 404 209","created":"2023-12-26T09:22:14.000Z"}}
+             * {"log":{"file":{"path":"/var/log/syslog"}},"tags":["production-server"],"event":{"original":"::1 - - [26/Jun/2020:16:16:29 +0200] \"GET /favicon.ico HTTP/1.1\" 404 209","created":"2023-12-26T09:22:14.000Z"}}
+             * {"module": "logcollector", "collector": "windows-eventlog"}
+             * {"tags":["production-server"],"event":{"original":"XML EVENT AS STRING","created":"2023-12-26T09:22:14.000Z","provider":"$CHANEL_NAME"}}
+             * {"tags":["production-server"],"event":{"original":"XML EVENT AS STRING","created":"2023-12-26T09:22:14.000Z","provider":"Microsoft-Windows-Security-Auditing"}}
+             * {"tags":["production-server"],"event":{"original":"XML EVENT AS STRING","created":"2023-12-26T09:22:14.000Z","provider":"Windows PowerShell"}}
+             * {"module": "logcollector", "collector": "journald"}
+             * {"tags":["production-server"],"event":{"original":"JSON EVENT OF JOURNALD AS STRING","created":"2023-12-26T09:22:14.000Z","provider":"$UNIT_NAME"}
+             * {"tags":["production-server"],"event":{"original":"JSON EVENT OF JOURNALD AS STRING","created":"2023-12-26T09:22:14.000Z","provider":"ssh.service"}}
              * ```
              *
              * @apiHeader {String} Content-Type=application/x-ndjson The content type of the request.
@@ -668,10 +640,6 @@ int main(int argc, char* argv[])
              * @apiBody (Agent Information) {Array} agent.host.ip Array of IP addresses of the agent. (e.g ["192.168.1.2"])
              * @apiBody (Agent Information) {String} agent.host.architecture Architecture of the agent, e.g., "x86_64".
              *
-             * @apiBody (Module Information) {Object} module Module information.
-             * @apiBody (Module Information) {String} module.module Name of the module, e.g., "logcollector" or "inventory".
-             * @apiBody (Module Information) {String} module.type Type of module, e.g., "file" or "package".
-             *
              * @apiBody (Log Information) {Object} log Log information.
              * @apiBody (Log Information) {Object} log.file File information.
              * @apiBody (Log Information) {String} log.file.path Path to the file, "/path/to/source". Exist only if is recolected from a file.
@@ -679,8 +647,8 @@ int main(int argc, char* argv[])
              * @apiBody (Log Information) {Object} event Details of the event itself.
              * @apiBody (Log Information) {String} event.original The original message collected from the agent.
              * @apiBody (Log Information) {String} event.created Timestamp when an event is recollected in '%Y-%m-%dT%H:%M:%SZ' format.
-             * @apiBody (Log Information) {String} event.module Name of the module this data is coming from. (e.g. apache, windows-eventchannel,
-             * journald, etc)
+             * @apiBody (Log Information) {String} event.module Name of the module this data is coming from. (e.g logcollector)
+             * @apiBody (Log Information) {String} event.collector Name of the collector this data is coming from. (e.g file, windows-eventlog, journald, macos-uls)
              * @apiBody (Log Information) {String} event.provider Source of the event. (e.g channel, file, journald unit, etc)
              *
              * @apiSuccessExample Success-Response:
@@ -697,40 +665,10 @@ int main(int argc, char* argv[])
              *     }
              */
             // clang-format on
-            g_apiServer->addRoute(apiserver::Method::POST,
-                                  "/events/stateless",
-                                  [orchestrator](const auto& req, auto& res)
-                                  {
-                                      try
-                                      {
-                                          orchestrator->postRawNdjson(std::string(req.body));
-                                          res.status = httplib::StatusCode::NoContent_204;
-                                      }
-                                      catch (const std::runtime_error& e)
-                                      {
-                                          res.status = httplib::StatusCode::BadRequest_400;
-                                      }
-                                  });
-        }
-
-        // Server
-        {
-            using namespace engineserver;
-            server = std::make_shared<EngineServer>(confManager.get<int>(conf::key::SERVER_THREAD_POOL_SIZE));
-            g_engineServer = server;
-
-            // API Endpoint
-            auto apiHandler = std::bind(&api::Api::processRequest, api, std::placeholders::_1, std::placeholders::_2);
-            auto apiClientFactory = std::make_shared<ph::WStreamFactory>(apiHandler); // API endpoint
-            apiClientFactory->setErrorResponse(base::utils::wazuhProtocol::WazuhResponse::unknownError().toString());
-            apiClientFactory->setBusyResponse(base::utils::wazuhProtocol::WazuhResponse::busyServer().toString());
-
-            auto apiEndpointCfg =
-                std::make_shared<endpoint::UnixStream>(confManager.get<std::string>(conf::key::SERVER_API_SOCKET),
-                                                       apiClientFactory,
-                                                       confManager.get<int>(conf::key::SERVER_API_QUEUE_SIZE),
-                                                       confManager.get<int>(conf::key::SERVER_API_TIMEOUT));
-            server->addEndpoint("API", apiEndpointCfg);
+            g_engineServer->addRoute(
+                httpsrv::Method::POST,
+                "/events/stateless",
+                api::event::handlers::pushEvent(orchestrator, api::event::protocol::getNDJsonParser()));
         }
     }
     catch (const std::exception& e)
@@ -744,12 +682,14 @@ int main(int argc, char* argv[])
     // Start server
     try
     {
-        g_apiServer->start(confManager.get<std::string>(conf::key::API_SERVER_SOCKET));
-        server->start();
+        g_engineServer->start(confManager.get<std::string>(conf::key::SERVER_EVENT_SOCKET),
+                              false); // Start in this thread
     }
     catch (const std::exception& e)
     {
         LOG_ERROR("An error occurred while running the server: {}.", utils::getExceptionStack(e));
     }
+
+    // Clean exit
     exitHandler.execute();
 }

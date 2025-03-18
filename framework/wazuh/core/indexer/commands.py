@@ -4,14 +4,20 @@ from typing import List
 from opensearchpy import exceptions
 from opensearchpy._async.helpers.search import AsyncSearch
 from opensearchpy._async.helpers.update_by_query import AsyncUpdateByQuery
-
-
-from .base import BaseIndex, IndexerKey, POST_METHOD
-from .utils import convert_enums
 from wazuh.core.exception import WazuhError
 from wazuh.core.indexer.models.commands import (
-    Action, Command, Source, Target, TargetType, CreateCommandResponse, ResponseResult
+    Action,
+    Command,
+    CreateCommandResponse,
+    ResponseResult,
+    Source,
+    Status,
+    Target,
+    TargetType,
 )
+
+from .base import POST_METHOD, BaseIndex, IndexerKey
+from .utils import convert_enums
 
 COMMAND_USER_NAME = 'Management API'
 COMMAND_KEY = 'command'
@@ -20,7 +26,7 @@ COMMAND_KEY = 'command'
 class CommandsManager(BaseIndex):
     """Set of methods to interact with the commands manager."""
 
-    INDEX = '.commands'
+    INDEX = 'wazuh-commands'
     PLUGIN_URL = '/_plugins/_command_manager'
 
     UPDATE_STATUS_SCRIPT = 'ctx._source.command.status = new String[] {params.status};'
@@ -62,12 +68,12 @@ class CommandsManager(BaseIndex):
             result=ResponseResult(response.get(IndexerKey.RESULT)),
         )
 
-    async def get_commands(self, status: str) -> List[Command]:
+    async def get_commands(self, status: Status) -> List[Command]:
         """Get commands that match with the given parameters.
 
         Parameters
         ----------
-        status : str
+        status : Status
             Status name.
 
         Returns
@@ -75,34 +81,32 @@ class CommandsManager(BaseIndex):
         commands : List[Command]
             Command list.
         """
-        query = AsyncSearch(using=self._client, index=self.INDEX).filter({
-            IndexerKey.TERM: {
-                f'{COMMAND_KEY}.{IndexerKey.STATUS}': status
-            }
-        })
-        response = await query.execute()
+        query = AsyncSearch(using=self._client, index=self.INDEX).filter(
+            {IndexerKey.TERM: {f'{COMMAND_KEY}.{IndexerKey.STATUS}': status.value}}
+        )
+
+        try:
+            response = await query.execute()
+        except (exceptions.RequestError, exceptions.TransportError) as e:
+            raise WazuhError(1761, extra_message=str(e))
 
         commands = []
         for hit in response:
-            commands.append(Command(**hit.to_dict()[COMMAND_KEY]))
+            commands.append(Command(document_id=hit.meta[IndexerKey.ID], **hit.to_dict()[COMMAND_KEY]))
 
         return commands
 
     async def update_commands_status(self, order_ids: List[str], status: str):
-        """Update the status for a list of order id's
+        """Update the status for a list of order id's.
 
         Args:
             order_ids (List[str]): List of order id's to update.
             status (str): New status to set.
         """
-        query = AsyncUpdateByQuery(using=self._client, index=self.INDEX).filter(
-            {
-                IndexerKey.TERMS: {'command.order_id': order_ids}
-            }
-        ).script(
-            source=self.UPDATE_STATUS_SCRIPT,
-            lang=IndexerKey.PAINLESS,
-            params={'status': status}
+        query = (
+            AsyncUpdateByQuery(using=self._client, index=self.INDEX)
+            .filter({IndexerKey.TERMS: {'command.order_id': order_ids}})
+            .script(source=self.UPDATE_STATUS_SCRIPT, lang=IndexerKey.PAINLESS, params={'status': status})
         )
         _ = await query.execute()
 
@@ -128,10 +132,7 @@ def create_restart_command(agent_id: str) -> Command:
             type=TargetType.AGENT,
             id=agent_id,
         ),
-        action=Action(
-            name='restart',
-            version='5.0.0'
-        ),
+        action=Action(name='restart', version='5.0.0'),
         user=COMMAND_USER_NAME,
         timeout=100,
     )
@@ -158,18 +159,14 @@ def create_set_group_command(agent_id: str, groups: List[str]) -> Command:
             type=TargetType.AGENT,
             id=agent_id,
         ),
-        action=Action(
-            name='set-group',
-            args=groups,
-            version='5.0.0'
-        ),
+        action=Action(name='set-group', args={'groups': groups}, version='5.0.0'),
         user=COMMAND_USER_NAME,
         timeout=100,
     )
 
 
-def create_update_group_command(agent_id: str) -> Command:
-    """Create a update group command for an agent with the ID specified.
+def create_fetch_config_command(agent_id: str) -> Command:
+    """Create a fetch config command for an agent with the ID specified.
 
     Parameters
     ----------
@@ -179,7 +176,7 @@ def create_update_group_command(agent_id: str) -> Command:
     Returns
     -------
     Command
-        Update group command.
+        Fetch config command.
     """
     return Command(
         source=Source.SERVICES,
@@ -187,10 +184,7 @@ def create_update_group_command(agent_id: str) -> Command:
             type=TargetType.AGENT,
             id=agent_id,
         ),
-        action=Action(
-            name='update-group',
-            version='5.0.0'
-        ),
+        action=Action(name='fetch-config', args={}, version='5.0.0'),
         user=COMMAND_USER_NAME,
         timeout=100,
     )

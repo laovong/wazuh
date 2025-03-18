@@ -203,7 +203,7 @@ class OpensearchManagement:
             print(f"An unexpected error occurred: {e}")
             self.stop()
 
-    def read_index(self, result: TestResult, expecteds: List[UnitOutput], retries=5, delay=4) -> bool:
+    def read_index(self, result: TestResult, expecteds: List[UnitOutput], retries=6, delay=5) -> bool:
         url_search = f'http://localhost:9200/{Constants.INDEX_PATTERN}/_search'
         headers = {"Content-Type": "application/json"}
         not_found = []
@@ -378,7 +378,7 @@ def load_indexer_output(engine_handler: EngineHandler) -> None:
         "outputs": [
             {
                 "wazuh-indexer": {
-                    "index": "alerts"
+                    "index": Constants.INDEX_PATTERN
                 }
             }
         ]

@@ -1,20 +1,62 @@
+import contextlib
 import os
-from typing import Tuple
 
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+from wazuh.core import common
+from wazuh.core.config.client import CentralizedConfig
+from wazuh.core.config.models.base import WazuhConfigBaseModel
 
-from wazuh import WazuhInternalError
-from wazuh.core.common import wazuh_uid, wazuh_gid, WAZUH_ETC
-
-_private_key_path = WAZUH_ETC / 'private_key.pem'
-_public_key_path = WAZUH_ETC / 'public_key.pem'
-
-JWT_ALGORITHM = 'ES256'
+JWT_ALGORITHM = 'RS256'
 JWT_ISSUER = 'wazuh'
 
 
-def get_keypair() -> Tuple[str, str]:
+def load_jwt_keys(api_config: WazuhConfigBaseModel):
+    """Load JWT keys into the configuration.
+
+    Parameters
+    ----------
+    api_config : WazuhConfigBaseModel
+        The configuration object with the JWT information.
+    """
+    config = CentralizedConfig.get_server_config()
+    if config.jwt.private_key and config.jwt.public_key:
+        return
+
+    # Generate keys from defined SSL key path
+    public_key = derive_public_key(api_config.ssl.key)
+
+    # Assign API SSL key as JWT private key and default JWT Public Key path
+    config.jwt.private_key = api_config.ssl.key
+    config.jwt.set_public_key(public_key)
+
+
+def derive_public_key(private_key_path: str) -> str:
+    """Derive public key from the API SSL certificate private key.
+
+    Parameters
+    ----------
+    private_key_path : str
+        The path to the JWT private key.
+
+    Returns
+    -------
+    str
+        Public key.
+    """
+    with open(private_key_path, mode='r') as key_file:
+        private_key_content = key_file.read()
+        private_key = serialization.load_pem_private_key(private_key_content.encode('utf-8'), password=None)
+
+    public_key = (
+        private_key.public_key()
+        .public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
+        .decode('utf-8')
+    )
+
+    return public_key
+
+
+def get_keypair() -> tuple[str, str]:
     """Return key files to keep safe or load existing public and private keys.
 
     Returns
@@ -23,67 +65,11 @@ def get_keypair() -> Tuple[str, str]:
         Private key.
     public_key : str
         Public key.
-
-    Raises
-    ------
-    WazuhInternalError(6003)
-        If there was an error trying to load the JWT secret.
     """
-    if not keypair_exists():
-        raise WazuhInternalError(6003, extra_message='key pair files not found')
+    config = CentralizedConfig.get_server_config()
 
-    with open(_private_key_path, mode='r') as key_file:
+    with open(config.jwt.private_key, mode='r') as key_file:
         private_key = key_file.read()
-    with open(_public_key_path, mode='r') as key_file:
-        public_key = key_file.read()
+    public_key = config.jwt.get_public_key()
 
     return private_key, public_key
-
-
-def generate_keypair() -> Tuple[str, str]:
-    """Generate JWT signing key pair and store them in files.
-
-    Returns
-    -------
-    private_key : str
-        Private key.
-    public_key : str
-        Public key.
-    """
-    key_obj = ec.generate_private_key(ec.SECP256K1())
-    private_key = key_obj.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()
-    ).decode('utf-8')
-    public_key = key_obj.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo
-    ).decode('utf-8')
-
-    with open(_private_key_path, mode='w') as key_file:
-        key_file.write(private_key)
-    with open(_public_key_path, mode='w') as key_file:
-        key_file.write(public_key)
-
-    try:
-        os.chown(_private_key_path, wazuh_uid(), wazuh_gid())
-        os.chown(_public_key_path, wazuh_uid(), wazuh_gid())
-    except PermissionError:
-        pass
-
-    os.chmod(_private_key_path, 0o640)
-    os.chmod(_public_key_path, 0o640)
-
-    return private_key, public_key
-
-
-def keypair_exists() -> bool:
-    """Return whether the key pair exists or not.
-
-    Returns
-    -------
-    bool
-        Whether the private and public key files exist or not.
-    """
-    return os.path.exists(_private_key_path) and os.path.exists(_public_key_path)

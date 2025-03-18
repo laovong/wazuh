@@ -22,7 +22,7 @@ Feature: Manage Geolocation Databases
         Given an existing db file "testdb-city.mmdb"
         When I send a request to add a database with path to "testdb-city.mmdb" and type "invalid"
         Then the response should be a "failure"
-        And the error message "Invalid geo::Type name string 'invalid' -> city, asn" is returned
+        And the error message "Invalid geo::Type name string 'invalid'" is returned
 
     Scenario: Delete an existing database
         Given an existing db file "testdb-city.mmdb"
@@ -47,7 +47,7 @@ Feature: Manage Geolocation Databases
         And the response should include "testdb-city.mmdb"
 
     Scenario: Remotely upsert a geolocation database
-        When I send a request to remotely upsert a database with path to "testdb-city.mmdb", type "city", db url "https://github.com/wazuh/wazuh/raw/master/src/engine/test/integration_tests/geo/data/base.mmdb" and hash url "https://github.com/wazuh/wazuh/raw/master/src/engine/test/integration_tests/geo/data/base.md5"
+        When I send a request to remotely upsert a database with path to "testdb-city.mmdb", type "city", db url "https://github.com/wazuh/wazuh/raw/main/src/engine/test/integration_tests/geo/data/base.mmdb" and hash url "https://github.com/wazuh/wazuh/raw/main/src/engine/test/integration_tests/geo/data/base.md5"
         Then the response should be a "success"
         And the database list "should" include "testdb-city.mmdb"
 
@@ -59,7 +59,7 @@ Feature: Manage Geolocation Databases
         Then the database list "should" include "testdb-city.mmdb"
 
     Scenario: Remotely added db persists after restart
-        When I send a request to remotely upsert a database with path to "testdb-city.mmdb", type "city", db url "https://github.com/wazuh/wazuh/raw/master/src/engine/test/integration_tests/geo/data/base.mmdb" and hash url "https://github.com/wazuh/wazuh/raw/master/src/engine/test/integration_tests/geo/data/base.md5"
+        When I send a request to remotely upsert a database with path to "testdb-city.mmdb", type "city", db url "https://github.com/wazuh/wazuh/raw/main/src/engine/test/integration_tests/geo/data/base.mmdb" and hash url "https://github.com/wazuh/wazuh/raw/main/src/engine/test/integration_tests/geo/data/base.md5"
         Then the response should be a "success"
         When I restart the engine
         Then the database list "should" include "testdb-city.mmdb"

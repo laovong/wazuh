@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/share/wazuh-server/framework/python/bin/python3
 
 # Copyright (C) 2015, Wazuh Inc.
 # Created by Wazuh, Inc. <info@wazuh.com>.
@@ -11,32 +11,30 @@ import os
 import signal
 import subprocess
 import sys
-from typing import List
 import time
+from functools import partial
+from typing import Any, List
 
+import psutil
 from wazuh.core import pyDaemonModule
-from wazuh.core.authentication import generate_keypair, keypair_exists
-from wazuh.core.common import WAZUH_SHARE, wazuh_gid, wazuh_uid, CONFIG_SERVER_SOCKET_PATH, WAZUH_RUN
-from wazuh.core.config.client import CentralizedConfig
-from wazuh.core.config.models.server import NodeType
 from wazuh.core.cluster.cluster import clean_up
-from wazuh.core.cluster.utils import ClusterLogger, context_tag, process_spawn_sleep, print_version, ping_unix_socket
+from wazuh.core.cluster.unix_server.server import start_unix_server
+from wazuh.core.cluster.utils import ClusterLogger, context_tag, ping_unix_socket, print_version, process_spawn_sleep
+from wazuh.core.common import CONFIG_SERVER_SOCKET_PATH, WAZUH_RUN, WAZUH_SHARE, wazuh_gid, wazuh_uid
+from wazuh.core.config.client import CentralizedConfig
+from wazuh.core.config.models.server import NodeType, ServerConfig
 from wazuh.core.exception import WazuhDaemonError
+from wazuh.core.task.order import get_orders
 from wazuh.core.utils import clean_pid_files, create_wazuh_dir
 from wazuh.core.wlogging import WazuhLogger
-from wazuh.core.cluster.unix_server.server import start_unix_server
-from wazuh.core.config.models.server import ServerConfig
-from wazuh.core.task.order import get_orders
-
 
 SERVER_DAEMON_NAME = 'wazuh-server'
-COMMS_API_SCRIPT_PATH = WAZUH_SHARE / 'apis' / 'scripts' / 'wazuh_comms_apid.py'
 COMMS_API_DAEMON_NAME = 'wazuh-comms-apid'
-EMBEDDED_PYTHON_PATH = WAZUH_SHARE / 'framework' / 'python' / 'bin' / 'python3'
+COMMS_API_SCRIPT_PATH = WAZUH_SHARE / 'apis' / 'scripts' / f'{COMMS_API_DAEMON_NAME}.py'
 ENGINE_BINARY_PATH = WAZUH_SHARE / 'bin' / 'wazuh-engine'
 ENGINE_DAEMON_NAME = 'wazuh-engined'
-MANAGEMENT_API_SCRIPT_PATH = WAZUH_SHARE / 'api' / 'scripts' / 'wazuh_apid.py'
-MANAGEMENT_API_DAEMON_NAME = 'wazuh-apid'
+MANAGEMENT_API_DAEMON_NAME = 'wazuh-server-management-apid'
+MANAGEMENT_API_SCRIPT_PATH = WAZUH_SHARE / 'apis' / 'scripts' / f'{MANAGEMENT_API_DAEMON_NAME}.py'
 
 
 #
@@ -106,10 +104,8 @@ def start_daemons(root: bool):
 
     daemons = {
         ENGINE_DAEMON_NAME: [ENGINE_BINARY_PATH, 'server', '-l', engine_log_level[debug_mode_], 'start'],
-        COMMS_API_DAEMON_NAME: [EMBEDDED_PYTHON_PATH, COMMS_API_SCRIPT_PATH]
-            + (['-r'] if root else []),
-        MANAGEMENT_API_DAEMON_NAME: [EMBEDDED_PYTHON_PATH, MANAGEMENT_API_SCRIPT_PATH]
-            + (['-r'] if root else []),
+        COMMS_API_DAEMON_NAME: [COMMS_API_SCRIPT_PATH] + (['-r'] if root else []),
+        MANAGEMENT_API_DAEMON_NAME: [MANAGEMENT_API_SCRIPT_PATH] + (['-r'] if root else []),
     }
 
     for name, args in daemons.items():
@@ -176,7 +172,7 @@ async def master_main(args: argparse.Namespace, server_config: ServerConfig, log
     start_unix_server(tag)
 
     while not ping_unix_socket(CONFIG_SERVER_SOCKET_PATH):
-        main_logger.info(f"Configuration server is not available, retrying...")
+        main_logger.info('Configuration server is not available, retrying...')
         time.sleep(1)
 
     my_server = master.Master(
@@ -233,7 +229,7 @@ async def worker_main(args: argparse.Namespace, server_config: ServerConfig, log
     start_unix_server(tag)
 
     while not ping_unix_socket(CONFIG_SERVER_SOCKET_PATH):
-        main_logger.info(f"Configuration server is not available, retrying...")
+        main_logger.info('Configuration server is not available, retrying...')
         time.sleep(1)
 
     # Pool is defined here so the child process is not recreated when the connection with master node is broken.
@@ -287,7 +283,7 @@ async def worker_main(args: argparse.Namespace, server_config: ServerConfig, log
 
             await asyncio.gather(*tasks)
         except asyncio.CancelledError:
-            logging.info("Connection with server has been lost. Reconnecting in 10 seconds.")
+            logging.info('Connection with server has been lost. Reconnecting in 10 seconds.')
             await asyncio.sleep(server_config.worker.intervals.connection_retry)
 
 
@@ -338,7 +334,7 @@ def start():
     """Start function of the wazuh-server script in charge of starting the server process."""
     try:
         server_pid = pyDaemonModule.get_wazuh_server_pid(SERVER_DAEMON_NAME)
-        if server_pid:
+        if server_pid and psutil.pid_exists(server_pid):
             print(f'The server is already running on process {server_pid}')
             sys.exit(1)
     except StopIteration:
@@ -365,16 +361,14 @@ def start():
         os.setuid(wazuh_uid())
 
     server_pid = os.getpid()
+
     pyDaemonModule.create_pid(SERVER_DAEMON_NAME, server_pid)
+    signal.signal(signal.SIGTERM, partial(sigterm_handler, server_pid=server_pid))
+
     main_logger.info(f'Starting server (pid: {server_pid})')
 
     if server_config.node.type == NodeType.MASTER:
         main_function = master_main
-
-        # Generate JWT signing key pair if it doesn't exist
-        if not keypair_exists():
-            main_logger.info('Generating JWT signing key pair')
-            generate_keypair()
     else:
         main_function = worker_main
 
@@ -382,7 +376,9 @@ def start():
     background_tasks = set()
     try:
         loop = asyncio.new_event_loop()
+        loop.add_signal_handler(signal.SIGTERM, partial(stop_loop, loop))
         background_tasks.add(loop.create_task(get_orders(main_logger)))
+        background_tasks.add(loop.create_task(monitor_server_daemons(loop, psutil.Process(server_pid))))
         loop.run_until_complete(main_function(args, server_config, main_logger))
     except KeyboardInterrupt:
         main_logger.info('SIGINT received. Shutting down...')
@@ -390,10 +386,167 @@ def start():
         main_logger.error("Directory '/tmp' needs read, write & execution " "permission for 'wazuh' user")
     except WazuhDaemonError as e:
         main_logger.error(e)
+    except RuntimeError:
+        main_logger.info('Main loop stopped.')
     except Exception as e:
         main_logger.error(f'Unhandled exception: {e}')
     finally:
         shutdown_server(server_pid)
+
+
+def _get_child_process(processes: List[psutil.Process], proc_name: str) -> psutil.Process:
+    """Search for proc_name whithin the list of processes.
+
+    Parameters
+    ----------
+    processes : List[psutil.Process]
+        List of processes to search within.
+    proc_name : str
+        Name of the process to search.
+
+    Returns
+    -------
+    psutil.Process
+        The found process.
+    """
+    return [i for i in processes if proc_name[:-1] in i.name()][0]
+
+
+def _check_children_number(process: psutil.Process, expected_children_number: int) -> bool:
+    """Check the process had the expected number of children number.
+
+    Parameters
+    ----------
+    process : psutil.Process
+        Process to get the current number of childre.
+    expected_children_number : int
+        Expected value to check.
+
+    Returns
+    -------
+    bool
+        True if the process had the expected number of children else False.
+    """
+    return len(process.children()) == expected_children_number
+
+
+def check_daemon(processes: list, proc_name: str, children_number: int):
+    """Check if the daemon is in the list of processes and has the correct number of children.
+
+    Parameters
+    ----------
+    processes : list
+        List of processes to search within.
+    proc_name : str
+        Name of the process to check.
+    children_number : int
+        Expected number of children to check.
+
+    Raises
+    ------
+    WazuhDaemonError
+        When the process does not have the correct number of children process.
+    """
+    child: psutil.Process = _get_child_process(processes, proc_name)
+    if child.status() == psutil.STATUS_ZOMBIE:
+        main_logger.error(f'Daemon `{proc_name}` is not running, stopping the whole server.')
+        clean_pid_files(proc_name)
+        return
+    if not _check_children_number(child, children_number):
+        raise WazuhDaemonError(f'Daemon `{proc_name}` does not have the correct number of children process.')
+
+
+async def check_for_server_readiness(server_process: psutil.Process, expected_state: dict):
+    """Check the server meets the expected daemons requirements at the startup.
+
+    Parameters
+    ----------
+    server_process : psutil.Process
+        Main server process to get current daemons status.
+    expected_state : dict
+        Expected daemons names and children number.
+    """
+    while True:
+        states = {}
+        processes = server_process.children()
+
+        for proc_name, children in expected_state.items():
+            try:
+                child: psutil.Process = _get_child_process(processes, proc_name)
+            except IndexError:
+                states.update({proc_name: False})
+                continue
+
+            if _check_children_number(child, children):
+                states.update({proc_name: True})
+            else:
+                states.update({proc_name: False})
+
+        if all(states.values()):
+            return
+        else:
+            main_logger.warning(
+                f"The Server doesn't meet the expected daemons state: {states}. Sleeping until next checking..."
+            )
+        await asyncio.sleep(10)
+
+
+async def monitor_server_daemons(loop: asyncio.BaseEventLoop, server_process: psutil.Process):
+    """Monitor the status of the server daemons.
+
+    Parameters
+    ----------
+    loop : asyncio.BaseEventLoop
+        The loop to stop in case any of the daemons does not meet the expected status.
+    server_process : int
+        Server process to get the children from.
+    """
+    comms_api_config = CentralizedConfig.get_comms_api_config()
+    process_children = {
+        MANAGEMENT_API_DAEMON_NAME[:15]: 3,
+        COMMS_API_DAEMON_NAME: comms_api_config.workers + 4,
+        ENGINE_DAEMON_NAME: 0,
+    }
+
+    await check_for_server_readiness(server_process, process_children)
+
+    while True:
+        await asyncio.sleep(10)
+        main_logger.debug('Checking server daemons status...')
+        child_processes = server_process.children()
+
+        try:
+            for proc_name, children in process_children.items():
+                check_daemon(child_processes, proc_name, children)
+        except WazuhDaemonError as error:
+            main_logger.error(f'{error.code} Stopping the whole server.')
+            stop_loop(loop)
+
+
+def stop_loop(loop: asyncio.BaseEventLoop):
+    """Stop the given asyncio loop.
+
+    Parameters
+    ----------
+    loop : asyncio.BaseEventLoop
+        The loop to stop.
+    """
+    loop.stop()
+
+
+def sigterm_handler(signum: int, frame: Any, server_pid: int) -> None:
+    """Handle SIGTERM signal shutting down the server.
+
+    Parameters
+    ----------
+    signum : int
+        The signal number received.
+    frame : Any
+        The current stack frame (unused).
+    server_pid : int
+        The server process ID used to terminate.
+    """
+    shutdown_server(server_pid)
 
 
 def stop():
@@ -404,7 +557,6 @@ def stop():
         main_logger.warning('Wazuh server is not running.')
         sys.exit(0)
 
-    shutdown_server(server_pid)
     os.kill(server_pid, signal.SIGTERM)
 
 

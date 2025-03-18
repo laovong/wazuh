@@ -365,6 +365,62 @@ FilterOp opBuilderHelperNotContains(const Reference& targetField,
                                     const std::shared_ptr<const IBuildCtx>& buildCtx);
 
 /**
+ * @brief Checks if the string stored in the field ends with the value provided.
+ *
+ * @param targetField target field of the helper
+ * @param opArgs Vector of operation arguments containing numeric values to be converted.
+ * @param buildCtx Shared pointer to the build context used for the conversion operation.
+ * @return FilterOp
+ *
+ * @throws std::runtime_error if cannot create the filter.
+ */
+FilterOp opBuilderHelperEndsWith(const Reference& targetField,
+                                 const std::vector<OpArg>& opArgs,
+                                 const std::shared_ptr<const IBuildCtx>& buildCtx);
+
+/**
+ * @brief Check if the reference parameter contains a valid IPv4 address.
+ *
+ * @param targetField target field of the helper
+ * @param opArgs Vector of operation arguments containing numeric values to be converted.
+ * @param buildCtx Shared pointer to the build context used for the conversion operation.
+ * @return FilterOp
+ *
+ * @throws std::runtime_error if cannot create the filter.
+ */
+FilterOp opBuilderHelperIsIpv4(const Reference& targetField,
+                               const std::vector<OpArg>& opArgs,
+                               const std::shared_ptr<const IBuildCtx>& buildCtx);
+
+/**
+ * @brief Check if the reference parameter contains a valid IPv6 address.
+ *
+ * @param targetField target field of the helper
+ * @param opArgs Vector of operation arguments containing numeric values to be converted.
+ * @param buildCtx Shared pointer to the build context used for the conversion operation.
+ * @return FilterOp
+ *
+ * @throws std::runtime_error if cannot create the filter.
+ */
+FilterOp opBuilderHelperIsIpv6(const Reference& targetField,
+                               const std::vector<OpArg>& opArgs,
+                               const std::shared_ptr<const IBuildCtx>& buildCtx);
+
+/**
+ * @brief Evaluate whether the current environment is test or production.
+ *
+ * @param targetField target field of the helper
+ * @param opArgs Vector of operation arguments containing numeric values to be converted.
+ * @param buildCtx Shared pointer to the build context used for the conversion operation.
+ * @return FilterOp
+ *
+ * @throws std::runtime_error if cannot create the filter.
+ */
+FilterOp opBuilderHelperIsTestSession(const Reference& targetField,
+                                      const std::vector<OpArg>& opArgs,
+                                      const std::shared_ptr<const IBuildCtx>& buildCtx);
+
+/**
  * @brief Create the helper function `array_not_contains_any` that filters events if the field
  * is an array and does not contain at least one of the specified values.
  *
@@ -570,6 +626,25 @@ FilterOp opBuilderHelperMatchValue(const Reference& targetField,
 FilterOp opBuilderHelperMatchKey(const Reference& targetField,
                                  const std::vector<OpArg>& opArgs,
                                  const std::shared_ptr<const IBuildCtx>& buildCtx);
+
+/**
+ * @brief Checks if all the specified keys from the target field (an object) are present in the given list.
+ * It verifies whether the elements in the list are included as keys in the target object.
+ * If any key from the target object is missing in the list, the validation fails.
+ * The function does not require that all keys in the list be present in the target field,
+ * but all keys from the target field must be in the list.
+ * If any element in the list is not a string, or if the target object is missing any keys from the list, the validation
+ * fails. This helper is particularly useful for ensuring that all required keys are present in the object and are
+ * strictly enforced in the list.
+ *
+ * @param targetField target field of the helper
+ * @param opArgs Vector of operation arguments containing the list of keys to be evaluated
+ * @param buildCtx Shared pointer to the build context used for the conversion operation.
+ * @return FilterOp
+ */
+FilterOp opBuilderHelperKeysExistInList(const Reference& targetField,
+                                        const std::vector<OpArg>& opArgs,
+                                        const std::shared_ptr<const IBuildCtx>& buildCtx);
 
 } // namespace builder::builders::opfilter
 

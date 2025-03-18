@@ -85,13 +85,12 @@ mkdir -p ${RPM_BUILD_ROOT}%{_localstatedir}usr/share/wazuh-server/bin
 mkdir -p ${RPM_BUILD_ROOT}%{_localstatedir}etc/wazuh-server
 
 cp -p %{_localstatedir}usr/share/wazuh-server/bin/wazuh-engine ${RPM_BUILD_ROOT}%{_localstatedir}usr/share/wazuh-server/bin/
-cp -p %{_localstatedir}usr/share/wazuh-server/bin/wazuh-apid ${RPM_BUILD_ROOT}%{_localstatedir}usr/share/wazuh-server/bin/
+cp -p %{_localstatedir}usr/share/wazuh-server/bin/wazuh-server-management-apid ${RPM_BUILD_ROOT}%{_localstatedir}usr/share/wazuh-server/bin/
 cp -p %{_localstatedir}usr/share/wazuh-server/bin/wazuh-comms-apid ${RPM_BUILD_ROOT}%{_localstatedir}usr/share/wazuh-server/bin/
 cp -p %{_localstatedir}usr/share/wazuh-server/bin/wazuh-server ${RPM_BUILD_ROOT}%{_localstatedir}usr/share/wazuh-server/bin/
 cp -p %{_localstatedir}usr/share/wazuh-server/bin/wazuh-keystore ${RPM_BUILD_ROOT}%{_localstatedir}usr/share/wazuh-server/bin/
 
 cp -pr %{_localstatedir}var/lib/wazuh-server ${RPM_BUILD_ROOT}%{_localstatedir}var/lib/
-cp -pr %{_localstatedir}var/log/wazuh-server ${RPM_BUILD_ROOT}%{_localstatedir}var/log/
 cp -pr %{_localstatedir}usr/share/wazuh-server ${RPM_BUILD_ROOT}%{_localstatedir}usr/share/
 cp -pr %{_localstatedir}etc/wazuh-server ${RPM_BUILD_ROOT}%{_localstatedir}etc/
 
@@ -174,7 +173,6 @@ if [ $1 = 0 ];then
   # Remove lingering folders and files
   rm -rf %{_localstatedir}run/wazuh-server
   rm -rf %{_localstatedir}var/lib/wazuh-server
-  rm -rf %{_localstatedir}var/log/wazuh-server
   rm -rf %{_localstatedir}usr/share/wazuh-server
   rm -rf %{_localstatedir}etc/wazuh-server
 fi
@@ -198,8 +196,6 @@ fi
 
 chown -R %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}var/lib/wazuh-server
 find %{_localstatedir}var/lib/wazuh-server -type d -exec chmod 750 {} \; -o -type f -exec chmod 640 {} \;
-chown -R %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}var/log/wazuh-server
-find %{_localstatedir}var/log/wazuh-server -type d -exec chmod 755 {} \; -o -type f -exec chmod 644 {} \;
 chown -R %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server
 find %{_localstatedir}usr/share/wazuh-server -type d -exec chmod 755 {} \; -o -type f -exec chmod 644 {} \;
 chown -R %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}etc/wazuh-server
@@ -208,12 +204,20 @@ find %{_localstatedir}etc/wazuh-server -type d -exec chmod 755 {} \; -o -type f 
 # Binaries
 chmod 750 %{_localstatedir}usr/share/wazuh-server/bin/wazuh-engine
 chown %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server/bin/wazuh-engine
-chmod 750 %{_localstatedir}usr/share/wazuh-server/bin/wazuh-apid
-chown %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server/bin/wazuh-apid
+chmod 750 %{_localstatedir}usr/share/wazuh-server/bin/wazuh-server-management-apid
+chown %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server/bin/wazuh-server-management-apid
 chmod 750 %{_localstatedir}usr/share/wazuh-server/bin/wazuh-comms-apid
 chown %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server/bin/wazuh-comms-apid
 chmod 750 %{_localstatedir}usr/share/wazuh-server/bin/wazuh-server
 chown %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server/bin/wazuh-server
+
+# Scripts
+chmod 750 %{_localstatedir}usr/share/wazuh-server/framework/scripts/wazuh-server.py
+chown %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server/framework/scripts/wazuh-server.py
+chmod 750 %{_localstatedir}usr/share/wazuh-server/apis/scripts/wazuh-comms-apid.py
+chown %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server/apis/scripts/wazuh-comms-apid.py
+chmod 750 %{_localstatedir}usr/share/wazuh-server/apis/scripts/wazuh-server-management-apid.py
+chown %{_wazuh_user}:%{_wazuh_group} %{_localstatedir}usr/share/wazuh-server/apis/scripts/wazuh-server-management-apid.py
 
 # Fix Python permissions
 chmod -R 0750 %{_localstatedir}usr/share/wazuh-server/framework/python/bin
@@ -233,21 +237,17 @@ rm -fr %{buildroot}
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}var/lib/wazuh-server/tmp
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}var/lib/wazuh-server/engine
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}var/lib/wazuh-server/engine/tzdb
-%dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}var/log/wazuh-server
-%dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}var/log/wazuh-server/engine
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}etc/wazuh-server
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}etc/wazuh-server/certs
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}etc/wazuh-server/cluster
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}etc/wazuh-server/groups
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/lib
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/framework
-%dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/api
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/apis
 %{_localstatedir}var/lib/wazuh-server/engine/tzdb/*
 %{_localstatedir}etc/wazuh-server/*
 %{_localstatedir}usr/share/wazuh-server/lib/*
 %{_localstatedir}usr/share/wazuh-server/framework/*
-%{_localstatedir}usr/share/wazuh-server/api/*
 %{_localstatedir}usr/share/wazuh-server/apis/*
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}var/lib/wazuh-server/engine/store
 %{_localstatedir}var/lib/wazuh-server/engine/store/*
@@ -256,7 +256,7 @@ rm -fr %{buildroot}
 %dir %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}var/lib/wazuh-server/indexer-connector
 
 %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/bin/wazuh-engine
-%attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/bin/wazuh-apid
+%attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/bin/wazuh-server-management-apid
 %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/bin/wazuh-comms-apid
 %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/bin/wazuh-server
 %attr(750, %{_wazuh_user}, %{_wazuh_group}) %{_localstatedir}usr/share/wazuh-server/bin/wazuh-keystore

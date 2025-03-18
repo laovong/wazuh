@@ -7,15 +7,18 @@ RUN apt-get update && apt-get install -y locales && rm -rf /var/lib/apt/lists/* 
 ENV LANG=en_US.utf8
 ENV REINSTALL_CMAKE_VERSION_FROM_SOURCE="3.30.5"
 
+# wazuh-server directory
+ENV RUN_WAZUH_SERVER=/run/wazuh-server
+
 # Engine specific environment variables
 ENV WAZUH_ROOT=/root/wazuh
 ENV ENGINE_SRC=$WAZUH_ROOT/src/engine
 ENV ENGINE_BUILD=$ENGINE_SRC/build
 
-# Force use the specific commit of master to aviod breaking changes like:
+# Force use the specific commit of main to avoid breaking changes like:
 # - Python packages
 # - Engine configuration and CLI
-ENV ENGINE_COMMIT_ID=5ca2998e1d97a7056611da6288a13a88cfd3ccf9
+ENV ENGINE_COMMIT_ID=321f69195c052358bf6252071ac0b421fd31fb3d
 ENV ENGINE_PRESET=release
 ENV ENGINE_ON_BACKGROUND=1
 ENV MM_LICENCE_KEY=
@@ -33,12 +36,19 @@ RUN apt-get update && apt-get install -y \
     git \
     openssh-server \
     software-properties-common \
+    python3-apt \
     curl \
     zip \
     lzip \
     unzip \
     tar
 ENV DEBIAN_FRONTEND=dialog
+
+# Update GCC to 11
+RUN add-apt-repository ppa:ubuntu-toolchain-r/test -y
+RUN apt-get update && apt-get install -y gcc-11 g++-11
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 1
+RUN update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 1
 
 # Update python
 RUN add-apt-repository ppa:deadsnakes/ppa -y

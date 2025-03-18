@@ -18,7 +18,7 @@ class TesterMessageTemplate:
     '''
     TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ" # 2023-12-26T09:22:14.000Z
 
-    def __init__(self, provider: str, module: str, created: str = "auto"):
+    def __init__(self, provider: str, module: str, collector: str, created: str = "auto"):
         '''
         Initializes the template with the given provider, module and created time.
 
@@ -56,11 +56,15 @@ class TesterMessageTemplate:
             }
         }
 
+        self._subheader_template = {
+            "collector": collector,
+            "module": module
+        }
+
         self._event_template = {
             "tags": ["production-server"],
             "event": {
                 "created": created,
-                "module": module,
                 "original": "$EVENT_AS_STRING",
                 "provider": provider
             },
@@ -78,7 +82,7 @@ class TesterMessageTemplate:
         '''
         Dumps the template as a dictionary.
         '''
-        return {"header": self._header_template, "event": self._event_template}
+        return {"header": self._header_template, "subheader": self._subheader_template, "event": self._event_template}
 
     def _load_template(self, template_dict: dict):
         '''
@@ -86,6 +90,7 @@ class TesterMessageTemplate:
         '''
 
         self._header_template = template_dict['header']
+        self._subheader_template = template_dict['subheader']
         self._event_template = template_dict['event']
 
     def get_header(self):
@@ -93,6 +98,12 @@ class TesterMessageTemplate:
         Returns the header as a JSON string of one line.
         '''
         return json.dumps(self._header_template, separators=(',', ':'))
+
+    def get_subheader(self):
+        '''
+        Returns the subheader as a JSON string of one line.
+        '''
+        return json.dumps(self._subheader_template, separators=(',', ':'))
 
     def get_event(self, event: str):
         '''

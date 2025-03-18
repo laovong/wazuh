@@ -1,14 +1,14 @@
 from typing import List, Optional
 
 from opensearchpy import exceptions
-# There's no other way to access these classes
-from opensearchpy._async.helpers.update_by_query import AsyncUpdateByQuery
 from opensearchpy._async.helpers.search import AsyncSearch
 
-from wazuh.core.indexer.base import BaseIndex, IndexerKey
-from wazuh.core.indexer.models.agent import Agent, Host
-from wazuh.core.indexer.utils import get_source_items
+# There's no other way to access these classes
+from opensearchpy._async.helpers.update_by_query import AsyncUpdateByQuery
 from wazuh.core.exception import WazuhError, WazuhResourceNotFound
+from wazuh.core.indexer.base import BaseIndex, IndexerKey
+from wazuh.core.indexer.models.agent import Agent, Host, Status
+from wazuh.core.indexer.utils import get_source_items
 
 DEFAULT_GROUP = 'default'
 AGENT_KEY = 'agent'
@@ -17,7 +17,7 @@ AGENT_KEY = 'agent'
 class AgentsIndex(BaseIndex):
     """Set of methods to interact with the `agents` index."""
 
-    INDEX = '.agents'
+    INDEX = 'wazuh-agents'
     SECONDARY_INDEXES = []
     REMOVE_GROUP_SCRIPT = """
     for (int i=ctx._source.agent.groups.length-1; i>=0; i--) {
@@ -34,7 +34,6 @@ class AgentsIndex(BaseIndex):
         key: str,
         type: str,
         version: str,
-        groups: List[str] = None,
         host: Host = None,
     ) -> Agent:
         """Create a new agent.
@@ -51,8 +50,6 @@ class AgentsIndex(BaseIndex):
             Agent type.
         version : str
             Agent version.
-        groups : str
-            Agent groups.
         host : Host
             Agent host information.
 
@@ -66,26 +63,18 @@ class AgentsIndex(BaseIndex):
         Agent : dict
             The created agent instance.
         """
-        group_list = [DEFAULT_GROUP]
-        if groups is not None:
-            group_list.extend(groups)
-
         agent = Agent(
             id=id,
             name=name,
             raw_key=key,
+            status=Status.NEVER_CONNECTED,
             type=type,
             version=version,
-            groups=group_list,
-            host=host if host else None
+            host=host if host else None,
         )
         try:
             await self._client.index(
-                index=self.INDEX,
-                id=id,
-                body={AGENT_KEY: agent.to_dict()},
-                op_type='create',
-                refresh='wait_for'
+                index=self.INDEX, id=id, body={AGENT_KEY: agent.to_dict()}, op_type='create', refresh='true'
             )
         except exceptions.ConflictError:
             raise WazuhError(1708, extra_message=id)
@@ -120,7 +109,7 @@ class AgentsIndex(BaseIndex):
         exclude: Optional[str] = None,
         offset: Optional[int] = None,
         limit: Optional[int] = None,
-        sort: Optional[str] = None
+        sort: Optional[str] = None,
     ) -> List[Agent]:
         """Perform a search operation with the given query.
 
@@ -206,17 +195,11 @@ class AgentsIndex(BaseIndex):
         group_name : str
             Group to delete.
         """
-        query = AsyncUpdateByQuery(using=self._client, index=self.INDEX) \
-            .filter({
-                IndexerKey.TERM: {
-                    'agent.groups': group_name
-                }
-            }) \
-            .script(
-                source=self.REMOVE_GROUP_SCRIPT,
-                lang=IndexerKey.PAINLESS,
-                params={'group': group_name}
-            )
+        query = (
+            AsyncUpdateByQuery(using=self._client, index=self.INDEX)
+            .filter({IndexerKey.TERM: {'agent.groups': group_name}})
+            .script(source=self.REMOVE_GROUP_SCRIPT, lang=IndexerKey.PAINLESS, params={'group': group_name})
+        )
         _ = await query.execute()
 
     async def get_group_agents(self, group_name: str) -> List[Agent]:
@@ -232,11 +215,9 @@ class AgentsIndex(BaseIndex):
         agents : List[Agent]
             Agents list.
         """
-        query = AsyncSearch(using=self._client, index=self.INDEX).filter({
-            IndexerKey.TERM: {
-                'agent.groups': group_name
-            }
-        })
+        query = AsyncSearch(using=self._client, index=self.INDEX).filter(
+            {IndexerKey.TERM: {'agent.groups': group_name}}
+        )
         response = await query.execute()
 
         agents = []
@@ -299,11 +280,9 @@ class AgentsIndex(BaseIndex):
                 }
                 """
 
-        query = AsyncUpdateByQuery(using=self._client, index=self.INDEX) \
-            .filter(IndexerKey.IDS, values=agent_ids) \
-            .script(
-                source=source,
-                lang=IndexerKey.PAINLESS,
-                params={'group': group_name}
-            )
+        query = (
+            AsyncUpdateByQuery(using=self._client, index=self.INDEX)
+            .filter(IndexerKey.IDS, values=agent_ids)
+            .script(source=source, lang=IndexerKey.PAINLESS, params={'group': group_name})
+        )
         _ = await query.execute()

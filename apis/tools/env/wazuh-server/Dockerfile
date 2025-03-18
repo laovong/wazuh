@@ -42,7 +42,7 @@ COPY scripts/reinstall-cmake.sh /tmp/reinstall-cmake.sh
 RUN chmod +x /tmp/reinstall-cmake.sh && /tmp/reinstall-cmake.sh ${CMAKE_VERSION}
 
 # Build and install wazuh-server
-ENV WAZUH_BRANCH=master
+ENV WAZUH_BRANCH=main
 ENV WAZUH_ROOT=/root/wazuh
 ENV ENGINE_PRESET=release
 ENV ENGINE_ON_BACKGROUND=1
@@ -61,8 +61,6 @@ RUN groupmod -n "$GROUP" ubuntu && usermod -l "$USER" ubuntu
 
 # Copy directories from builder
 COPY --from=builder --chown=${USER}:${GROUP} /etc/wazuh-server /etc/wazuh-server
-
-COPY --from=builder --chown=${USER}:${GROUP} /var/log/wazuh-server /var/log/wazuh-server
 
 COPY --from=builder --chown=${USER}:${GROUP} /var/lib/wazuh-server /var/lib/wazuh-server
 

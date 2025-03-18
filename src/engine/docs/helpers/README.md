@@ -3,18 +3,27 @@ This documentation provides an overview of the auxiliary functions available. Au
 
 # Index
 ## Filter
+- [array_contains](#array_contains)
+- [array_contains_any](#array_contains_any)
+- [array_not_contains](#array_not_contains)
+- [array_not_contains_any](#array_not_contains_any)
 - [binary_and](#binary_and)
 - [contains](#contains)
+- [ends_with](#ends_with)
 - [exists](#exists)
 - [exists_key_in](#exists_key_in)
+- [has_keys](#has_keys)
 - [int_equal](#int_equal)
 - [int_greater](#int_greater)
+- [int_greater_or_equal](#int_greater_or_equal)
 - [int_less](#int_less)
 - [int_less_or_equal](#int_less_or_equal)
 - [int_not_equal](#int_not_equal)
 - [ip_cidr_match](#ip_cidr_match)
 - [is_array](#is_array)
 - [is_boolean](#is_boolean)
+- [is_ipv4](#is_ipv4)
+- [is_ipv6](#is_ipv6)
 - [is_not_array](#is_not_array)
 - [is_not_boolean](#is_not_boolean)
 - [is_not_object](#is_not_object)
@@ -23,6 +32,7 @@ This documentation provides an overview of the auxiliary functions available. Au
 - [is_object](#is_object)
 - [is_public_ip](#is_public_ip)
 - [is_string](#is_string)
+- [is_test_session](#is_test_session)
 - [kvdb_match](#kvdb_match)
 - [kvdb_not_match](#kvdb_not_match)
 - [match_value](#match_value)
@@ -34,26 +44,25 @@ This documentation provides an overview of the auxiliary functions available. Au
 - [string_less_or_equal](#string_less_or_equal)
 - [string_not_equal](#string_not_equal)
 ## Map
-- [active_response_send](#active_response_send)
 - [as](#as)
 - [concat](#concat)
 - [concat_any](#concat_any)
 - [date_from_epoch](#date_from_epoch)
 - [decode_base16](#decode_base16)
 - [downcase](#downcase)
+- [float_calculate](#float_calculate)
 - [geoip](#geoip)
+- [get_date](#get_date)
 - [hex_to_number](#hex_to_number)
 - [int_calculate](#int_calculate)
 - [ip_version](#ip_version)
 - [join](#join)
 - [regex_extract](#regex_extract)
-- [send_upgrade_confirmation](#send_upgrade_confirmation)
 - [sha1](#sha1)
 - [system_epoch](#system_epoch)
+- [to_int](#to_int)
 - [to_string](#to_string)
 - [upcase](#upcase)
-- [wdb_query](#wdb_query)
-- [wdb_update](#wdb_update)
 ## Transformation
 - [array_append](#array_append)
 - [array_append_any](#array_append_any)
@@ -67,8 +76,11 @@ This documentation provides an overview of the auxiliary functions available. Au
 - [kvdb_get](#kvdb_get)
 - [kvdb_get_array](#kvdb_get_array)
 - [kvdb_get_merge](#kvdb_get_merge)
+- [kvdb_get_merge_recursive](#kvdb_get_merge_recursive)
 - [kvdb_set](#kvdb_set)
 - [merge](#merge)
+- [merge_key_in](#merge_key_in)
+- [merge_recursive_key_in](#merge_recursive_key_in)
 - [parse_alphanumeric](#parse_alphanumeric)
 - [parse_between](#parse_between)
 - [parse_binary](#parse_binary)
@@ -92,6 +104,158 @@ This documentation provides an overview of the auxiliary functions available. Au
 - [sca_decoder](#sca_decoder)
 - [split](#split)
 - [trim](#trim)
+# array_contains
+
+## Signature
+
+```
+
+field: array_contains(element, [...])
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| element | object, array, number, string, boolean | value or reference | Any object |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| array | [number, string, boolean, object, array] |
+
+
+## Description
+
+Checks if all elements are present in a given array.
+It supports multiple data types, including objects, arrays, numbers, strings, and boolean values.
+As a variadic function, it accepts multiple elements as search arguments.
+A test passes if all provided elements exist in the target array.
+If at least one element is missing, the validation fails.
+This behavior makes it useful for filtering lists based on the presence of specific values.
+
+
+**Keywords**
+
+- `array` 
+
+---
+# array_contains_any
+
+## Signature
+
+```
+
+field: array_contains_any(element, [...])
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| element | object, array, number, string, boolean | value or reference | Any object |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| array | [number, string, boolean, object, array] |
+
+
+## Description
+
+Checks whether at least one of the provided elements is present in a given array.
+It supports multiple data types, including objects, arrays, numbers, strings, and boolean values.
+As a variadic function, it accepts multiple elements as search arguments.
+A test passes if at least one provided element exists in the target array.
+If none of the elements are found, the validation fails.
+This behavior makes it useful for filtering lists based on partial matches.
+
+
+**Keywords**
+
+- `array` 
+
+---
+# array_not_contains
+
+## Signature
+
+```
+
+field: array_not_contains(element, [...])
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| element | object, array, number, string, boolean | value or reference | Any object |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| array | [number, string, boolean, object, array] |
+
+
+## Description
+
+Determines whether one or more elements are absent from a given array.
+It supports multiple data types, including objects, arrays, numbers, strings, and boolean values.
+As a variadic function, it accepts multiple elements as search arguments.
+A test passes if none of the provided elements exist in the target array.
+If all elements in the array are found, validation fails.
+This behavior is useful for filtering lists by excluding specific values.
+
+
+**Keywords**
+
+- `array` 
+
+---
+# array_not_contains_any
+
+## Signature
+
+```
+
+field: array_not_contains_any(element, [...])
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| element | object, array, number, string, boolean | value or reference | Any object |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| array | [number, string, boolean, object, array] |
+
+
+## Description
+
+Checks whether none of the provided elements are present in a given array.
+It supports multiple data types, including objects, arrays, numbers, strings, and boolean values.
+As a variadic function, it accepts multiple elements as search arguments.
+A test passes if none of the provided elements exist in the target array.
+If at least one element is found, the validation fails.
+This behavior makes it useful for filtering lists to exclude specific values.
+
+
+**Keywords**
+
+- `array` 
+
+---
 # binary_and
 
 ## Signature
@@ -161,6 +325,40 @@ In case of error, the function will evaluate to false.
 - `undefined` 
 
 ---
+# ends_with
+
+## Signature
+
+```
+
+field: ends_with(conteined)
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| conteined | string | value or reference | Any string |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| string | Any string |
+
+
+## Description
+
+Checks if the string stored in the field ends with the value provided.
+If they're not, the function evaluates to false. In case of error, the function will evaluate to false.
+
+
+**Keywords**
+
+- `string` 
+
+---
 # exists
 
 ## Signature
@@ -223,6 +421,48 @@ This helper function is typically used in the check stage.
 **Keywords**
 
 - `undefined` 
+
+---
+# has_keys
+
+## Signature
+
+```
+
+field: has_keys(elements)
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| elements | array | value or reference | Any string |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| object | Any object |
+
+
+## Description
+
+Checks if all the specified keys from the target field (an object) are present in the given list.
+It verifies whether the elements in the list are included as keys in the target object.
+If any key from the target object is missing in the list, the validation fails.
+The function does not require that all keys in the list be present in the target field,
+but all keys from the target field must be in the list.
+If any element in the list is not a string, or if the target object is missing any keys from the list, the validation fails.
+This helper is particularly useful for ensuring that all required keys are present in the object and
+are strictly enforced in the list.
+
+
+**Keywords**
+
+- `array` 
+
+- `object` 
 
 ---
 # int_equal
@@ -288,6 +528,43 @@ field: int_greater(any_number)
 ## Description
 
 Checkers whether the integer number stored in field is greater than to the one provided.
+If they're not, the function evaluates to false. In case of error, the function will evaluate to false.
+This helper function is typically used in the check stage
+
+
+**Keywords**
+
+- `integer` 
+
+- `comparison` 
+
+---
+# int_greater_or_equal
+
+## Signature
+
+```
+
+field: int_greater_or_equal(any_number)
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| any_number | number | value or reference | Integers between `-2^63` and `2^63-1` |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| number | Integers between `-2^63` and `2^63-1` |
+
+
+## Description
+
+Checkers whether the integer number stored in field is greater than or equal to the one provided.
 If they're not, the function evaluates to false. In case of error, the function will evaluate to false.
 This helper function is typically used in the check stage
 
@@ -498,6 +775,69 @@ field: is_boolean()
 
 Checks if the value stored in field is of type boolean.
 If they're not, the function evaluates to false. In case of error, the function will evaluate to false.
+This helper function is typically used in the check stage
+
+
+**Keywords**
+
+- `undefined` 
+
+---
+# is_ipv4
+
+## Signature
+
+```
+
+field: is_ipv4()
+```
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| string | Any IP |
+
+
+## Description
+
+Checks if the IP address stored in the field is an IPv4.
+IPv4:
+  - 10.0.0.0
+  - 172.16.0.0
+  - 192.168.0.0
+  - 127.0.0.0
+This helper function is typically used in the check stage
+
+
+**Keywords**
+
+- `undefined` 
+
+---
+# is_ipv6
+
+## Signature
+
+```
+
+field: is_ipv6()
+```
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| string | Any IP |
+
+
+## Description
+
+Checks if the IP address stored in the field is an IPv6.
+IPv6:
+  - ::1
+  - fd00:abcd::1234
+  - a03:2880:f10c:83:face:b00c::25de
 This helper function is typically used in the check stage
 
 
@@ -731,6 +1071,33 @@ field: is_string()
 
 Checks if the value stored in field is of type string.
 If they're not, the function evaluates to false. In case of error, the function will evaluate to false.
+This helper function is typically used in the check stage
+
+
+**Keywords**
+
+- `undefined` 
+
+---
+# is_test_session
+
+## Signature
+
+```
+
+field: is_test_session()
+```
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| [number, string, boolean, array, object] | - |
+
+
+## Description
+
+Check if the environment in use is testing or production.
 This helper function is typically used in the check stage
 
 
@@ -1098,42 +1465,6 @@ This helper function is typically used in the check stage
 - `comparison` 
 
 ---
-# active_response_send
-
-## Signature
-
-```
-
-field: active_response_send(ar-message)
-```
-
-## Arguments
-
-| parameter | Type | Source | Accepted values |
-| --------- | ---- | ------ | --------------- |
-| ar-message | string | value or reference | Any string |
-
-
-## Outputs
-
-| Type | Possible values |
-| ---- | --------------- |
-| string | Any string |
-
-
-## Description
-
-Sends a message through the active response queue and updates the field with the result of the execution
-if the message could be sent without any problem it will be set to true, if not to false.
-Thre result value doesn`t mean that it checks the correct execution of the Active response.
-This helper function is typically used in the map stage.
-
-
-**Keywords**
-
-- `undefined` 
-
----
 # as
 
 ## Signature
@@ -1269,8 +1600,7 @@ field: date_from_epoch(epoch)
 ## Description
 
 Date from epoch will convert the input value, can be a reference or a value representing the epoch time to a human readable date time.
-Remember epoch, understood as UNIX epoch, is the seconds passed since january first of 1970, so it will fail on negative values.
-Floating points numbers will be converted to integers.
+Transforms UNIX epoch time to a human readable date time in the format of 'YYYY-MM-DDTHH:MM:SSZ'.
 
 
 **Keywords**
@@ -1347,6 +1677,51 @@ If the field field already exists, then it will be replaced. In case of errors �
 - `string` 
 
 ---
+# float_calculate
+
+## Signature
+
+```
+
+field: float_calculate(operator, operand_left, operand_right, [...])
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| operator | string | value | mul, div, sub, sum |
+| operand_left | number | value or reference |
+| operand_right | number | value or reference |
+
+
+## Outputs
+
+| Type | Possible values |
+| ---- | --------------- |
+| number |
+
+
+## Description
+
+The function `float_calculate` performs basic arithmetic operations on floats and integers.
+The function receives an operator and two or more operands.
+The function applies the operator to the first two operands and then applies the result to the next operand.
+The result of the operation is stored in the field `field`.
+The function supports the following operators: `sum` (addition), `sub` (subtraction), `mul` (multiplication), and `div` (division).
+
+
+**Keywords**
+
+- `math` 
+
+## Notes
+
+- Division by zero is not allowed (the function will fail).
+
+- The limit for a float is 3.402823466e+38
+
+---
 # geoip
 
 ## Signature
@@ -1391,6 +1766,32 @@ In case of success it will return an object with the following fields:
 **Keywords**
 
 - `max_min_db` 
+
+---
+# get_date
+
+## Signature
+
+```
+
+field: get_date()
+```
+
+## Outputs
+
+| Type | Possible values |
+| ---- | --------------- |
+| string | Any string |
+
+
+## Description
+
+Get the current date in the format "%Y-%m-%dT%H:%M:%SZ". The date is generated in UTC time zone.
+
+
+**Keywords**
+
+- `time` 
 
 ---
 # hex_to_number
@@ -1586,41 +1987,6 @@ This helper function is used in the map stage
 - `undefined` 
 
 ---
-# send_upgrade_confirmation
-
-## Signature
-
-```
-
-field: send_upgrade_confirmation(json)
-```
-
-## Arguments
-
-| parameter | Type | Source | Accepted values |
-| --------- | ---- | ------ | --------------- |
-| json | object | reference | Any object |
-
-
-## Outputs
-
-| Type | Possible values |
-| ---- | --------------- |
-| boolean | Any boolean |
-
-
-## Description
-
-Receives a JSON object that must contain the agent id, error field and message among other mandatory fields and
-send it throug the UPGRADE socket. The result of the communication will be return as a boolean value
-being true when sent ok and false otherwise. This helper function is typically used in the map stage.
-
-
-**Keywords**
-
-- `undefined` 
-
----
 # sha1
 
 ## Signature
@@ -1682,6 +2048,47 @@ If the “field” already exists, then it will be replaced.
 **Keywords**
 
 - `time` 
+
+---
+# to_int
+
+## Signature
+
+```
+
+field: to_int(number_to_transform, operation_mode)
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| number_to_transform | number | reference |
+| operation_mode | string | value | truncate, round |
+
+
+## Outputs
+
+| Type | Possible values |
+| ---- | --------------- |
+| number | Integers between `-2^63` and `2^63-1` |
+
+
+## Description
+
+Transforms a number to an integer by truncating the fractional part or rounding to the nearest integer based on the fractional value (e.g., 9.6 → 10, -4.7 → -5);
+values with a fractional part ≥ 0.5 or ≤ -0.5 round away from zero, while others round toward zero.
+The result of the to_int operation is mapped to “target_field”. In case of errors “target_field” will not be modified.
+This helper function is typically used in the map stage
+
+
+**Keywords**
+
+- `double` 
+
+- `float` 
+
+- `integer` 
 
 ---
 # to_string
@@ -1751,78 +2158,6 @@ If the “field” already exists, then it will be replaced. In case of errors �
 **Keywords**
 
 - `string` 
-
----
-# wdb_query
-
-## Signature
-
-```
-
-field: wdb_query(query)
-```
-
-## Arguments
-
-| parameter | Type | Source | Accepted values |
-| --------- | ---- | ------ | --------------- |
-| query | string | value or reference | Any string |
-
-
-## Outputs
-
-| Type | Possible values |
-| ---- | --------------- |
-| string | Any string |
-
-
-## Description
-
-Perform a query to wazuh-db. If it was able to connect to wazuh-db and run a valid query (no errors)
-then map the payload response of wazuh-db into field. If the field field already exists, then it will be replaced.
-In case of errors target field will not be modified.
-This helper function is typically used in the map stage
-
-
-**Keywords**
-
-- `wdb` 
-
----
-# wdb_update
-
-## Signature
-
-```
-
-field: wdb_update(query)
-```
-
-## Arguments
-
-| parameter | Type | Source | Accepted values |
-| --------- | ---- | ------ | --------------- |
-| query | string | value or reference | Any string |
-
-
-## Outputs
-
-| Type | Possible values |
-| ---- | --------------- |
-| boolean | Any boolean |
-
-
-## Description
-
-Perform a query to wazuh-db. If it was able to connect to wazuh-db and run a valid query (no errors)
-then map `true` into field if not, then map `false` into field.
-If the field field already exists, then it will be replaced. In case of errors target field will not be modified.
-This helper function is typically used in the map stage
-
-
-**Keywords**
-
-- `wdb` 
 
 ---
 # array_append
@@ -2264,6 +2599,45 @@ value type hold by field. This helper function is typically used in the map stag
 - `kvdb` 
 
 ---
+# kvdb_get_merge_recursive
+
+## Signature
+
+```
+
+field: kvdb_get_merge_recursive(db-name, key)
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| db-name | string | value | Any string |
+| key | string | value or reference | Any string |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| [object, array] | - |
+
+
+## Description
+
+Gets the value of a given key in the DB named db-name and, if successful, merges this value with what the field had before.
+The merge process is recursive, meaning that for object or array types, the new value is deeply integrated with the existing value in the field.
+Key value type can be string, number, object, array, or null, and it must match the previous value type held by the field.
+This helper function is typically used in the map stage.
+
+
+**Keywords**
+
+- `kvdb` 
+
+- `recursive` 
+
+---
 # kvdb_set
 
 ## Signature
@@ -2334,6 +2708,80 @@ When merging objects, if a collision is produced the target key will be overridd
 When merging arrays, if a collision is produced the target key will be preserved in its original order
 and will be not duplicated.
 This helper function is typically used in the map stage
+
+
+**Keywords**
+
+- `undefined` 
+
+---
+# merge_key_in
+
+## Signature
+
+```
+
+field: merge_key_in(any_object, key)
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| any_object | object | value or reference | Any object |
+| key | string | reference | Any string |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| object | Any object |
+
+
+## Description
+
+Merge in target field value with the content of some key in the specified object, where the key is specified with a reference to another field.
+The object parameter must be a definition object or a reference to a field containing the object.
+This helper function is typically used in the map stage.
+
+
+**Keywords**
+
+- `undefined` 
+
+---
+# merge_recursive_key_in
+
+## Signature
+
+```
+
+field: merge_recursive_key_in(any_object, key)
+```
+
+## Arguments
+
+| parameter | Type | Source | Accepted values |
+| --------- | ---- | ------ | --------------- |
+| any_object | object | value or reference | Any object |
+| key | string | reference | Any string |
+
+
+## Target Field
+
+| Type | Possible values |
+| ---- | --------------- |
+| object | Any object |
+
+
+## Description
+
+Recursively merge the target field value with the content of a specified key in the given object.
+The key is identified through a reference to another field.
+If the key's value contains nested objects, the merge operation is applied recursively, combining all levels of the structure.
+The object parameter must be a definition object or a reference to a field containing the object.
+This helper function is typically used in the map stage to ensure deep merging of complex objects.
 
 
 **Keywords**

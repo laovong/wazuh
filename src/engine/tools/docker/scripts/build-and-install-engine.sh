@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Force use the specific commit of master to aviod breaking changes in:
+# Force use the specific commit of main to avoid breaking changes in:
 # - Python packages
 # - Engine configuration
 
@@ -15,6 +15,10 @@ if [ -n "${ENGINE_COMMIT_ID}" ]; then
 fi
 
 git submodule update --init --recursive
+
+if [ ! -d "$RUN_WAZUH_SERVER" ]; then
+    mkdir -p "$RUN_WAZUH_SERVER"
+fi
 
 # Install the engine
 USER_LANGUAGE="en"                   \
@@ -57,6 +61,3 @@ engine-clear -f # Run it twice to make sure it's empty (BUG in the engine-clear 
 
 echo "Stopping the engine"
 kill -SIGTERM $(cat /tmp/engine.pid)
-
-# TODO Remove after change the `output/file-output-wazuh-core/0` in ruleset
-mkdir -p "/var/ossec/logs/alerts/"

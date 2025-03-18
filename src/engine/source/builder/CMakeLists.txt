@@ -45,9 +45,6 @@ add_library(builder STATIC
     ${SRC_DIR}/builders/opmap/opBuilderHelperMap.cpp
     ${SRC_DIR}/builders/opmap/kvdb.cpp
     ${SRC_DIR}/builders/opmap/mmdb.cpp
-    ${SRC_DIR}/builders/opmap/activeResponse.cpp
-    ${SRC_DIR}/builders/opmap/upgradeConfirmation.cpp
-    ${SRC_DIR}/builders/opmap/wdb.cpp
 
     # Filter
     ${SRC_DIR}/builders/opfilter/filter.cpp
@@ -59,7 +56,6 @@ add_library(builder STATIC
     # Transform
     ${SRC_DIR}/builders/optransform/array.cpp
     ${SRC_DIR}/builders/optransform/hlp.cpp
-    ${SRC_DIR}/builders/optransform/sca.cpp
     ${SRC_DIR}/builders/optransform/windows.cpp
 )
 target_include_directories(builder PUBLIC ${BUILDER_PUB_INCS} PRIVATE ${BUILDER_PRI_INCS})
@@ -72,8 +68,6 @@ target_link_libraries(builder
     base
     kvdb::ikvdb
     geo::igeo
-    sockiface::isock
-    wdb::iwdb
     indexerconnector::iindexerconnector
     logpar
 
@@ -102,7 +96,7 @@ add_executable(builder_ctest
     ${COMPONENT_SRC_DIR}/builder_test.cpp
     ${COMPONENT_SRC_DIR}/validator_test.cpp
 )
-target_link_libraries(builder_ctest PRIVATE builder GTest::gtest_main schemf::mocks store::mocks defs::mocks sockiface::mocks base::test)
+target_link_libraries(builder_ctest PRIVATE builder GTest::gtest_main schemf::mocks store::mocks defs::mocks base::test)
 gtest_discover_tests(builder_ctest)
 
 ## Unit tests
@@ -117,35 +111,37 @@ add_executable(builder_utest
     ${UNIT_SRC_DIR}/builders/opfilter/filter_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/exists_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/startsWith_test.cpp
+    ${UNIT_SRC_DIR}/builders/opfilter/endsWith_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/intCmp_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/strCmp_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/regex_test.cpp
+    ${UNIT_SRC_DIR}/builders/opfilter/is_ipv4_test.cpp
+    ${UNIT_SRC_DIR}/builders/opfilter/is_ipv6_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/ip_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/arrayContains_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/types_test.cpp
     ${UNIT_SRC_DIR}/builders/opfilter/match_test.cpp
+    ${UNIT_SRC_DIR}/builders/opfilter/is_test_session_test.cpp
+    ${UNIT_SRC_DIR}/builders/opfilter/has_keys_test.cpp
 
     # Map Builders
     ${UNIT_SRC_DIR}/builders/opmap/map_test.cpp
     ${UNIT_SRC_DIR}/builders/opmap/strTransform_test.cpp
+    ${UNIT_SRC_DIR}/builders/opmap/floatCalc_test.cpp
     ${UNIT_SRC_DIR}/builders/opmap/intCalc_test.cpp
+    ${UNIT_SRC_DIR}/builders/opmap/toInt_test.cpp
     ${UNIT_SRC_DIR}/builders/opmap/regex_test.cpp
     ${UNIT_SRC_DIR}/builders/opmap/ip_test.cpp
     ${UNIT_SRC_DIR}/builders/opmap/time_test.cpp
     ${UNIT_SRC_DIR}/builders/opmap/hash_test.cpp
     ${UNIT_SRC_DIR}/builders/opmap/kvdb_test.cpp
     ${UNIT_SRC_DIR}/builders/opmap/mmdb_test.cpp
-    ${UNIT_SRC_DIR}/builders/opmap/activeResponse_test.cpp
-    ${UNIT_SRC_DIR}/builders/opmap/upgradeConfirmation_test.cpp
-    ${UNIT_SRC_DIR}/builders/opmap/wdb_test.cpp
 
     # Transform Builders
     ${UNIT_SRC_DIR}/builders/optransform/strTransform_test.cpp
     ${UNIT_SRC_DIR}/builders/optransform/jsonTransform_test.cpp
     ${UNIT_SRC_DIR}/builders/optransform/array_test.cpp
     ${UNIT_SRC_DIR}/builders/optransform/objectGet_test.cpp
-    ${UNIT_SRC_DIR}/builders/optransform/sca_test.cpp
-    ${UNIT_SRC_DIR}/builders/optransform/scaInternal_test.cpp
     ${UNIT_SRC_DIR}/builders/optransform/windows_test.cpp
     ${UNIT_SRC_DIR}/builders/optransform/hlp_test.cpp
 
@@ -172,8 +168,6 @@ target_link_libraries(builder_utest
     store::mocks
     defs::mocks
     kvdb::mocks
-    sockiface::mocks
-    wdb::mocks
     geo::mocks
     base::test
     indexerconnector::mocks

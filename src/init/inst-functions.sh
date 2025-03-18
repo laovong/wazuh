@@ -69,12 +69,12 @@ InstallServer()
     ${PYTHON_BIN_PATH} -m pip install ../framework/
 
     ## Install Server management API
-    ${MAKEBIN} --quiet -C ../api install INSTALLDIR=/usr/share/wazuh-server
-    ${PYTHON_BIN_PATH} -m pip install ../api/
+    ${MAKEBIN} --quiet -C ../apis/server_management install INSTALLDIR=/usr/share/wazuh-server
+    ${PYTHON_BIN_PATH} -m pip install ../apis/server_management
 
     ## Install Communications API
-    ${MAKEBIN} --quiet -C ../apis/comms_api install INSTALLDIR=/usr/share/wazuh-server
-    ${PYTHON_BIN_PATH} -m pip install ../apis/
+    ${MAKEBIN} --quiet -C ../apis/communications install INSTALLDIR=/usr/share/wazuh-server
+    ${PYTHON_BIN_PATH} -m pip install ../apis/communications
 
 }
 
@@ -98,17 +98,19 @@ installFallbackStore()
 {
     # Creating fallback store directories
     local STORE_PATH=${INSTALLDIR}var/lib/wazuh-server/engine/store
+    local KVDB_PATH=${INSTALLDIR}var/lib/wazuh-server/engine/kvdb
     local SCHEMA_PATH=${STORE_PATH}/schema
     local ENGINE_SCHEMA_PATH=${SCHEMA_PATH}/engine-schema/
-    local ENGINE_LOGPAR_TYPE_PATH=${SCHEMA_PATH}/wazuh-logpar-types
+    local ENGINE_LOGPAR_TYPE_PATH=${SCHEMA_PATH}/wazuh-logpar-overrides
 
+    mkdir -p "${KVDB_PATH}"
     mkdir -p "${ENGINE_SCHEMA_PATH}"
     mkdir -p "${ENGINE_LOGPAR_TYPE_PATH}"
 
     # Copying the store files
     echo "Copying store files..."
     cp "${ENGINE_SRC_PATH}/ruleset/schemas/engine-schema.json" "${ENGINE_SCHEMA_PATH}/0"
-    cp "${ENGINE_SRC_PATH}/ruleset/schemas/wazuh-logpar-types.json" "${ENGINE_LOGPAR_TYPE_PATH}/0"
+    cp "${ENGINE_SRC_PATH}/ruleset/schemas/wazuh-logpar-overrides.json" "${ENGINE_LOGPAR_TYPE_PATH}/0"
 
     if [ ! -f "${ENGINE_SCHEMA_PATH}/0" ] || [ ! -f "${ENGINE_LOGPAR_TYPE_PATH}/0" ]; then
         echo "Error: Failed to copy store files."
@@ -116,7 +118,9 @@ installFallbackStore()
     fi
 
     chown -R ${WAZUH_USER}:${WAZUH_GROUP} ${STORE_PATH}
+    chown -R ${WAZUH_USER}:${WAZUH_GROUP} ${KVDB_PATH}
     find ${STORE_PATH} -type d -exec chmod 750 {} \; -o -type f -exec chmod 640 {} \;
+    find ${KVDB_PATH} -type d -exec chmod 750 {} \; -o -type f -exec chmod 640 {} \;
 }
 
 installEngineStore()
@@ -175,8 +179,6 @@ InstallEngine()
   ${INSTALL} -d -m 0750 -o ${WAZUH_USER} -g ${WAZUH_GROUP} ${INSTALLDIR}var/lib/wazuh-server/
   ${INSTALL} -d -m 0750 -o ${WAZUH_USER} -g ${WAZUH_GROUP} ${INSTALLDIR}var/lib/wazuh-server/vd
   ${INSTALL} -d -m 0750 -o ${WAZUH_USER} -g ${WAZUH_GROUP} ${INSTALLDIR}var/lib/wazuh-server/engine
-  ${INSTALL} -d -m 0755 -o ${WAZUH_USER} -g ${WAZUH_GROUP} ${INSTALLDIR}var/log/wazuh-server
-  ${INSTALL} -d -m 0755 -o ${WAZUH_USER} -g ${WAZUH_GROUP} ${INSTALLDIR}var/log/wazuh-server/engine
 
   cp -rp engine/build/tzdb ${INSTALLDIR}var/lib/wazuh-server/engine/
   chown -R ${WAZUH_USER}:${WAZUH_GROUP} ${INSTALLDIR}var/lib/wazuh-server/engine/tzdb

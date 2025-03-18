@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <unordered_set>
 #include <variant>
 
 #include <re2/re2.h>
@@ -853,12 +854,14 @@ FilterOp opBuilderHelperPublicIP(const Reference& targetField,
         RETURN_FAILURE(runState, false, failureTrace2);
     };
 }
+
 //*************************************************
 //*               Array filters                   *
 //*************************************************
 FilterOp opBuilderHelperArrayPresence(const Reference& targetField,
                                       const std::vector<OpArg>& opArgs,
                                       bool atleastOne,
+                                      bool presenceCheck,
                                       const std::shared_ptr<const IBuildCtx>& buildCtx)
 {
     // Assert expected number of parameters
@@ -873,10 +876,11 @@ FilterOp opBuilderHelperArrayPresence(const Reference& targetField,
         fmt::format("[{}] -> Failure: Target field '{}' not found", name, targetField.dotPath())};
     const std::string failureTrace2 {
         fmt::format("[{}] -> Failure: Target field '{}' is not an array", name, targetField.dotPath())};
-    const std::string failureTrace3 {fmt::format("[{}] -> Failure: Target array '{}' {} of the parameters",
-                                                 name,
-                                                 targetField.dotPath(),
-                                                 "does not contain at least one")};
+    const std::string failureTrace3 {
+        fmt::format("[{}] -> Failure: Target array '{}' {} of the parameters",
+                    name,
+                    targetField.dotPath(),
+                    presenceCheck ? "does not contain at least one" : "contains at least one")};
 
     // Return Op
     return [=, parameters = opArgs, runState = buildCtx->runState(), targetField = targetField.jsonPath()](
@@ -894,7 +898,7 @@ FilterOp opBuilderHelperArrayPresence(const Reference& targetField,
         }
 
         json::Json cmpValue {};
-        auto successCount {0};
+        auto matchCount {0};
         for (const auto& parameter : parameters)
         {
             if (parameter->isReference())
@@ -914,100 +918,21 @@ FilterOp opBuilderHelperArrayPresence(const Reference& targetField,
                 cmpValue = std::move(std::static_pointer_cast<Value>(parameter)->value().getJson().value());
             }
 
-            // Check if the array contains the value, if so finish
-            if (std::find_if(resolvedArray.value().begin(),
-                             resolvedArray.value().end(),
-                             [&cmpValue](const json::Json& value) { return value == cmpValue; })
-                != resolvedArray.value().end())
+            // Check if the array contains the value
+            bool found = std::find_if(resolvedArray.value().begin(),
+                                      resolvedArray.value().end(),
+                                      [&cmpValue](const json::Json& value) { return value == cmpValue; })
+                         != resolvedArray.value().end();
+
+            if (presenceCheck == found)
             {
                 if (atleastOne)
                 {
                     RETURN_SUCCESS(runState, true, successTrace);
                 }
 
-                successCount++;
-                if (successCount == parameters.size())
-                {
-                    RETURN_SUCCESS(runState, true, successTrace);
-                }
-            }
-        }
-
-        RETURN_FAILURE(runState, false, failureTrace3);
-    };
-}
-
-FilterOp opBuilderHelperArrayNotPresence(const Reference& targetField,
-                                         const std::vector<OpArg>& opArgs,
-                                         bool atleastOne,
-                                         const std::shared_ptr<const IBuildCtx>& buildCtx)
-{
-    // Assert expected number of parameters
-    utils::assertSize(opArgs, 1, utils::MAX_OP_ARGS);
-
-    auto name = buildCtx->context().opName;
-
-    // Tracing
-    const std::string successTrace {fmt::format("[{}] -> Success", name)};
-
-    const std::string failureTrace1 {
-        fmt::format("[{}] -> Failure: Target field '{}' not found", name, targetField.dotPath())};
-    const std::string failureTrace2 {
-        fmt::format("[{}] -> Failure: Target field '{}' is not an array", name, targetField.dotPath())};
-    const std::string failureTrace3 {fmt::format("[{}] -> Failure: Target array '{}' {} of the parameters",
-                                                 name,
-                                                 targetField.dotPath(),
-                                                 "contain at least one")};
-
-    // Return Op
-    return [=, parameters = opArgs, runState = buildCtx->runState(), targetField = targetField.jsonPath()](
-               base::ConstEvent event) -> FilterResult
-    {
-        if (!event->exists(targetField))
-        {
-            RETURN_FAILURE(runState, false, failureTrace1);
-        }
-
-        const auto resolvedArray {event->getArray(targetField)};
-        if (!resolvedArray.has_value())
-        {
-            RETURN_FAILURE(runState, false, failureTrace2);
-        }
-
-        json::Json cmpValue {};
-        auto successCount {0};
-        for (const auto& parameter : parameters)
-        {
-            if (parameter->isReference())
-            {
-                auto resolvedParameter {event->getJson(std::static_pointer_cast<Reference>(parameter)->jsonPath())};
-                if (resolvedParameter.has_value())
-                {
-                    cmpValue = std::move(resolvedParameter.value());
-                }
-                else
-                {
-                    continue;
-                }
-            }
-            else
-            {
-                cmpValue = std::move(std::static_pointer_cast<Value>(parameter)->value().getJson().value());
-            }
-
-            // Check if the array contains the value, if so finish
-            if (std::find_if(resolvedArray.value().begin(),
-                             resolvedArray.value().end(),
-                             [&cmpValue](const json::Json& value) { return value == cmpValue; })
-                == resolvedArray.value().end())
-            {
-                if (atleastOne)
-                {
-                    RETURN_SUCCESS(runState, true, successTrace);
-                }
-
-                successCount++;
-                if (successCount == parameters.size())
+                matchCount++;
+                if (matchCount == parameters.size())
                 {
                     RETURN_SUCCESS(runState, true, successTrace);
                 }
@@ -1023,17 +948,7 @@ FilterOp opBuilderHelperContains(const Reference& targetField,
                                  const std::vector<OpArg>& opArgs,
                                  const std::shared_ptr<const IBuildCtx>& buildCtx)
 {
-    auto op = opBuilderHelperArrayPresence(targetField, opArgs, false, buildCtx);
-    return op;
-}
-
-// field: +array_contains_any/value1/value2/...valueN
-FilterOp opBuilderHelperContainsAny(const Reference& targetField,
-                                    const std::vector<OpArg>& opArgs,
-                                    const std::shared_ptr<const IBuildCtx>& buildCtx)
-{
-    auto op = opBuilderHelperArrayPresence(targetField, opArgs, true, buildCtx);
-    return op;
+    return opBuilderHelperArrayPresence(targetField, opArgs, false, true, buildCtx);
 }
 
 // field: +array_not_contains/value1/value2/...valueN
@@ -1041,8 +956,15 @@ FilterOp opBuilderHelperNotContains(const Reference& targetField,
                                     const std::vector<OpArg>& opArgs,
                                     const std::shared_ptr<const IBuildCtx>& buildCtx)
 {
-    auto op = opBuilderHelperArrayNotPresence(targetField, opArgs, false, buildCtx);
-    return op;
+    return opBuilderHelperArrayPresence(targetField, opArgs, true, false, buildCtx);
+}
+
+// field: +array_contains_any/value1/value2/...valueN
+FilterOp opBuilderHelperContainsAny(const Reference& targetField,
+                                    const std::vector<OpArg>& opArgs,
+                                    const std::shared_ptr<const IBuildCtx>& buildCtx)
+{
+    return opBuilderHelperArrayPresence(targetField, opArgs, true, true, buildCtx);
 }
 
 // field: +array_not_contains_any/value1/value2/...valueN
@@ -1050,8 +972,7 @@ FilterOp opBuilderHelperNotContainsAny(const Reference& targetField,
                                        const std::vector<OpArg>& opArgs,
                                        const std::shared_ptr<const IBuildCtx>& buildCtx)
 {
-    auto op = opBuilderHelperArrayNotPresence(targetField, opArgs, true, buildCtx);
-    return op;
+    return opBuilderHelperArrayPresence(targetField, opArgs, false, false, buildCtx);
 }
 
 //*************************************************
@@ -1400,6 +1321,310 @@ FilterOp opBuilderHelperMatchKey(const Reference& targetField,
         if (!exists)
         {
             RETURN_FAILURE(runState, false, failureTrace6);
+        }
+
+        RETURN_SUCCESS(runState, true, successTrace);
+    };
+}
+
+// <field>: +end_with/$<definition_object>|$<object_reference>
+FilterOp opBuilderHelperEndsWith(const Reference& targetField,
+                                 const std::vector<OpArg>& opArgs,
+                                 const std::shared_ptr<const IBuildCtx>& buildCtx)
+{
+    // Assert expected number of parameters
+    utils::assertSize(opArgs, 1);
+
+    if (opArgs[0]->isValue())
+    {
+        if (!std::static_pointer_cast<Value>(opArgs[0])->value().isString())
+        {
+            throw std::runtime_error(fmt::format("Expected 'string' value but got '{}'",
+                                                 std::static_pointer_cast<Value>(opArgs[0])->value().typeName()));
+        }
+    }
+    else
+    {
+        auto ref = std::static_pointer_cast<Reference>(opArgs[0]);
+        const auto& validator = buildCtx->validator();
+        if (validator.hasField(ref->dotPath()))
+        {
+            if (validator.getType(ref->dotPath()) != schemf::Type::KEYWORD
+                && validator.getType(ref->dotPath()) != schemf::Type::TEXT)
+            {
+                throw std::runtime_error(fmt::format("Reference '{}' is of type '{}' but expected 'keyword' or 'text'",
+                                                     ref->dotPath(),
+                                                     schemf::typeToStr(validator.getType(ref->dotPath()))));
+            }
+        }
+    }
+
+    const auto name = buildCtx->context().opName;
+
+    // Tracing
+    const std::string successTrace {fmt::format("[{}] -> Success", name)};
+
+    const std::string failureTrace1 {
+        fmt::format("[{}] -> Failure: Target field '{}' not found or is not a string", name, targetField.dotPath())};
+    const std::string failureTrace2 {
+        fmt::format("[{}] -> Failure: Target field '{}' is not a string", name, targetField.dotPath())};
+    const std::string failureTrace3 {fmt::format("[{}] -> Failure: Reference not found or is not a string", name)};
+
+    const std::string failureTrace4 {
+        fmt::format("[{}] -> Failure: String does not end with '{}'", name, targetField.dotPath())};
+
+    // Return op
+    return [failureTrace1,
+            failureTrace2,
+            failureTrace3,
+            failureTrace4,
+            successTrace,
+            runState = buildCtx->runState(),
+            targetField = targetField.jsonPath(),
+            parameter = opArgs[0]](base::ConstEvent event) -> FilterResult
+    {
+        const auto targetString = event->getString(targetField);
+        if (!targetString.has_value())
+        {
+            RETURN_FAILURE(runState, false, failureTrace1);
+        }
+
+        if (parameter->isReference())
+        {
+            auto refPath = std::static_pointer_cast<Reference>(parameter)->jsonPath();
+            const auto stringReference = event->getString(refPath);
+            if (!stringReference.has_value())
+            {
+                RETURN_FAILURE(runState, false, failureTrace1);
+            }
+
+            if (!base::utils::string::endsWith(targetString.value(), stringReference.value()))
+            {
+                RETURN_FAILURE(runState, false, failureTrace4);
+            }
+
+            RETURN_SUCCESS(runState, true, successTrace);
+        }
+        else
+        {
+            auto valueString = std::static_pointer_cast<Value>(parameter)->value().getString().value();
+            if (!base::utils::string::endsWith(targetString.value(), valueString))
+            {
+                RETURN_FAILURE(runState, false, failureTrace4);
+            }
+
+            RETURN_SUCCESS(runState, true, successTrace);
+        }
+    };
+}
+
+// <field>: +is_ipv4/
+FilterOp opBuilderHelperIsIpv4(const Reference& targetField,
+                               const std::vector<OpArg>& opArgs,
+                               const std::shared_ptr<const IBuildCtx>& buildCtx)
+{
+    // Assert expected number of parameters
+    utils::assertSize(opArgs, 0);
+
+    const auto name = buildCtx->context().opName;
+
+    // Tracing
+    const std::string successTrace {fmt::format("[{}] -> Success", name)};
+    const std::string failureTrace1 {
+        fmt::format("[{}] -> Failure: Target field '{}' not found or is not a string", name, targetField.dotPath())};
+    const std::string failureTrace2 {fmt::format("{} -> Failure: IP address is not IPv4", name)};
+
+    // Return op
+    return [failureTrace1,
+            failureTrace2,
+            successTrace,
+            runState = buildCtx->runState(),
+            targetField = targetField.jsonPath()](base::ConstEvent event) -> FilterResult
+    {
+        const auto targetString = event->getString(targetField);
+        if (!targetString.has_value())
+        {
+            RETURN_FAILURE(runState, false, failureTrace1);
+        }
+
+        if (!::utils::ip::checkStrIsIPv4(targetString.value()))
+        {
+            RETURN_FAILURE(runState, false, failureTrace2);
+        }
+
+        RETURN_SUCCESS(runState, true, successTrace);
+    };
+}
+
+// <field>: +is_ipv6/
+FilterOp opBuilderHelperIsIpv6(const Reference& targetField,
+                               const std::vector<OpArg>& opArgs,
+                               const std::shared_ptr<const IBuildCtx>& buildCtx)
+{
+    // Assert expected number of parameters
+    utils::assertSize(opArgs, 0);
+
+    const auto name = buildCtx->context().opName;
+
+    // Tracing
+    const std::string successTrace {fmt::format("[{}] -> Success", name)};
+    const std::string failureTrace1 {
+        fmt::format("[{}] -> Failure: Target field '{}' not found or is not a string", name, targetField.dotPath())};
+    const std::string failureTrace2 {fmt::format("{} -> Failure: IP address is not IPv6", name)};
+
+    // Return op
+    return [failureTrace1,
+            failureTrace2,
+            successTrace,
+            runState = buildCtx->runState(),
+            targetField = targetField.jsonPath()](base::ConstEvent event) -> FilterResult
+    {
+        const auto targetString = event->getString(targetField);
+        if (!targetString.has_value())
+        {
+            RETURN_FAILURE(runState, false, failureTrace1);
+        }
+
+        if (!::utils::ip::checkStrIsIPv6(targetString.value()))
+        {
+            RETURN_FAILURE(runState, false, failureTrace2);
+        }
+
+        RETURN_SUCCESS(runState, true, successTrace);
+    };
+}
+
+// <field>: +is_test_session
+FilterOp opBuilderHelperIsTestSession(const Reference& targetField,
+                                      const std::vector<OpArg>& opArgs,
+                                      const std::shared_ptr<const IBuildCtx>& buildCtx)
+{
+    // Assert expected number of parameters
+    utils::assertSize(opArgs, 0);
+
+    const auto name = buildCtx->context().opName;
+    const auto runState = buildCtx->runState();
+
+    // Tracing
+    const std::string successTrace {fmt::format("[{}] -> Success", name)};
+
+    const std::string failureTrace {
+        fmt::format("[{}] -> Failure: The evaluated environment is a production environment", name)};
+
+    // Return op
+    return [failureTrace, successTrace, runState](base::ConstEvent event) -> FilterResult
+    {
+        if (runState->sandbox)
+        {
+            RETURN_SUCCESS(runState, true, successTrace);
+        }
+        RETURN_FAILURE(runState, false, failureTrace);
+    };
+}
+
+// <field>: +has_keys/$<list_value>|$<list_reference>
+FilterOp opBuilderHelperKeysExistInList(const Reference& targetField,
+                                        const std::vector<OpArg>& opArgs,
+                                        const std::shared_ptr<const IBuildCtx>& buildCtx)
+{
+    utils::assertSize(opArgs, 1);
+
+    std::unordered_set<std::string> expectedKeys {};
+    if (opArgs[0]->isValue())
+    {
+        auto list = std::static_pointer_cast<Value>(opArgs[0])->value().getArray();
+        if (!list.has_value())
+        {
+            throw std::runtime_error(fmt::format("Expected 'array' value but got '{}'",
+                                                 std::static_pointer_cast<Value>(opArgs[0])->value().typeName()));
+        }
+
+        for (const auto& element : list.value())
+        {
+            if (!element.isString())
+            {
+                throw std::runtime_error(fmt::format("Expecting a 'string' array but found '{}'", element.typeName()));
+            }
+            expectedKeys.insert(element.getString().value());
+        }
+    }
+    else
+    {
+        const auto arrayRef = *std::static_pointer_cast<Reference>(opArgs[0]);
+        const auto& validator = buildCtx->validator();
+
+        if (validator.hasField(arrayRef.dotPath()))
+        {
+            if (!validator.isArray(arrayRef.dotPath()))
+            {
+                throw std::runtime_error(fmt::format(
+                    "Expected 'array' reference but got reference '{}' wich is not an array", arrayRef.dotPath()));
+            }
+
+            auto jType = validator.getJsonType(arrayRef.dotPath());
+            if (jType != json::Json::Type::String)
+            {
+                throw std::runtime_error(
+                    fmt::format("Expected array of 'string' but got array of '{}'", json::Json::typeToStr(jType)));
+            }
+        }
+    }
+
+    const auto name = buildCtx->context().opName;
+    const std::string successTrace = fmt::format("[{}] -> Success", name);
+    const std::string failureTrace1 = fmt::format(
+        "[{}] -> Failure: Target field '{}' not found or is not a json object", name, targetField.dotPath());
+    const std::string failureTrace2 = fmt::format("[{}] -> Failure: Reference not found or is not an array", name);
+    const std::string failureTrace3 = fmt::format("[{}] -> Failure: Element in array is not a string", name);
+    const std::string failureTrace4 =
+        fmt::format("[{}] -> Failure: There are keys in the target field that are missing from the list", name);
+
+    return [failureTrace1,
+            failureTrace2,
+            failureTrace3,
+            failureTrace4,
+            successTrace,
+            runState = buildCtx->runState(),
+            targetField = targetField.jsonPath(),
+            parameter = opArgs[0],
+            expectedKeys](base::ConstEvent event) -> FilterResult
+    {
+        const auto objectTarget = event->getObject(targetField);
+        if (!objectTarget.has_value())
+        {
+            RETURN_FAILURE(runState, false, failureTrace1);
+        }
+
+        std::unordered_set<std::string> localKeys = expectedKeys;
+        if (parameter->isReference())
+        {
+            auto refPath = std::static_pointer_cast<Reference>(parameter)->jsonPath();
+            const auto list = event->getArray(refPath);
+            if (!list.has_value())
+            {
+                RETURN_FAILURE(runState, false, failureTrace2);
+            }
+            for (const auto& element : list.value())
+            {
+                if (!element.isString())
+                {
+                    RETURN_FAILURE(runState, false, failureTrace3);
+                }
+                localKeys.insert(element.getString().value());
+            }
+        }
+
+        if (localKeys.size() < objectTarget.value().size())
+        {
+            RETURN_FAILURE(runState, false, failureTrace4);
+        }
+
+        for (const auto& [key, value] : objectTarget.value())
+        {
+            if (localKeys.erase(key) == 0)
+            {
+                RETURN_FAILURE(runState, false, failureTrace4);
+            }
         }
 
         RETURN_SUCCESS(runState, true, successTrace);

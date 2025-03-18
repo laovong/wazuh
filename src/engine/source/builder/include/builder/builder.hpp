@@ -10,9 +10,7 @@
 #include <logpar/logpar.hpp>
 #include <schemf/ischema.hpp>
 #include <schemf/ivalidator.hpp>
-#include <sockiface/isockFactory.hpp>
 #include <store/istore.hpp>
-#include <wdb/iwdbManager.hpp>
 
 #include <builder/ibuilder.hpp>
 #include <builder/ivalidator.hpp>
@@ -27,8 +25,6 @@ struct BuilderDeps
 
     std::string kvdbScopeName;
     std::shared_ptr<kvdbManager::IKVDBManager> kvdbManager;
-    std::shared_ptr<sockiface::ISockFactory> sockFactory;
-    std::shared_ptr<wazuhdb::IWDBManager> wdbManager;
     std::shared_ptr<geo::IManager> geoManager;
     std::shared_ptr<IIndexerConnector> iConnector;
 };
@@ -55,7 +51,8 @@ public:
             const std::shared_ptr<defs::IDefinitionsBuilder>& definitionsBuilder,
             const BuilderDeps& builderDeps);
 
-    std::shared_ptr<IPolicy> buildPolicy(const base::Name& name) const override;
+    std::shared_ptr<IPolicy>
+    buildPolicy(const base::Name& name, bool trace = false, bool sandbox = false) const override;
     base::Expression buildAsset(const base::Name& name) const override;
 
     base::OptError validateIntegration(const json::Json& json, const std::string& namespaceId) const override;

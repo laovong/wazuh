@@ -177,9 +177,6 @@ find_and_create_imported_target("maxminddb" "maxminddb::maxminddb")
 find_and_create_imported_target("benchmark" "benchmark::benchmark")
 find_and_create_imported_target("pugixml" "pugixml::pugixml")
 
-find_and_create_imported_target("libuv" "libuv::libuv")
-find_and_create_imported_target("uvw" "uvw::uvw")
-
 find_and_create_imported_target("opentelemetry-cpp" "opentelemetry-cpp::api")
 find_and_create_imported_target("opentelemetry-cpp" "opentelemetry-cpp::sdk")
 find_and_create_imported_target("opentelemetry-cpp" "opentelemetry-cpp::logs")
@@ -210,7 +207,6 @@ add_subdirectory(${ENGINE_SOURCE_DIR}/vdscanner)
 add_subdirectory(${ENGINE_SOURCE_DIR}/wazuh-http-request)
 add_subdirectory(${ENGINE_SOURCE_DIR}/indexerconnector)
 add_subdirectory(${ENGINE_SOURCE_DIR}/base)
-add_subdirectory(${ENGINE_SOURCE_DIR}/sockiface)
 add_subdirectory(${ENGINE_SOURCE_DIR}/bk)
 add_subdirectory(${ENGINE_SOURCE_DIR}/rbac)
 add_subdirectory(${ENGINE_SOURCE_DIR}/api)
@@ -222,9 +218,7 @@ add_subdirectory(${ENGINE_SOURCE_DIR}/hlp)
 add_subdirectory(${ENGINE_SOURCE_DIR}/logpar)
 add_subdirectory(${ENGINE_SOURCE_DIR}/kvdb)
 add_subdirectory(${ENGINE_SOURCE_DIR}/logicexpr)
-add_subdirectory(${ENGINE_SOURCE_DIR}/server)
 add_subdirectory(${ENGINE_SOURCE_DIR}/yml)
-add_subdirectory(${ENGINE_SOURCE_DIR}/wdb)
 add_subdirectory(${ENGINE_SOURCE_DIR}/store)
 add_subdirectory(${ENGINE_SOURCE_DIR}/router)
 add_subdirectory(${ENGINE_SOURCE_DIR}/conf)
@@ -232,9 +226,9 @@ add_subdirectory(${ENGINE_SOURCE_DIR}/proto)
 add_subdirectory(${ENGINE_SOURCE_DIR}/metrics)
 add_subdirectory(${ENGINE_SOURCE_DIR}/geo)
 add_subdirectory(${ENGINE_SOURCE_DIR}/queue)
-add_subdirectory(${ENGINE_SOURCE_DIR}/apiserver)
 add_subdirectory(${ENGINE_SOURCE_DIR}/fs)
 add_subdirectory(${ENGINE_SOURCE_DIR}/keystore)
+add_subdirectory(${ENGINE_SOURCE_DIR}/httpsrv)
 
 target_link_libraries(main
     base
@@ -244,23 +238,22 @@ target_link_libraries(main
     builder
     #bk::taskf
     bk::rx
-    server
     router::router
     store
+    store::fileDriver
     api
-    libuv::uv_a
     kvdb
     eMessages
     metrics
     geo
     schemf
-    wdb
-    sockiface
     rbac
     geo::igeo
     vdscanner
-    apiserver
     indexerconnector
+    httpsrv
+    api::event
+    queue
 )
 
 # If ASAN, UBSAN or any other sanitizers are enabled do not link with static libraries
